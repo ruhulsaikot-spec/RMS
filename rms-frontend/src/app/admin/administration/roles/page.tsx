@@ -1,0 +1,1003 @@
+"use client";
+
+import {
+  useEffect,
+  useState,
+} from "react";
+import { toast } from "sonner";
+
+import Sidebar from "@/components/layout/sidebar";
+import Topbar from "@/components/layout/topbar";
+import PermissionGuard from "@/components/auth/permission-guard";
+
+export default function RolesPage() {
+    const [showModal, setShowModal] = useState(false);
+
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [deleteId, setDeleteId] =
+    useState<string | null>(null);
+
+    const [roles, setRoles] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const [roleForm, setRoleForm] = useState({
+    code: "",
+    name: "",
+    description: "",
+    status: "Active",
+    });
+    const [search, setSearch] = useState("");
+    const [statusFilter, setStatusFilter] = useState("All");
+    const [currentPage, setCurrentPage] = useState(1);
+
+    useEffect(() => {
+        loadRoles();
+        }, []);
+
+        const loadRoles = async () => {
+        try {
+            setLoading(true);
+
+            const token =
+            localStorage.getItem("access_token");
+
+            const response = await fetch(
+            "http://localhost:8000/api/roles",
+            {
+                headers: {
+                Authorization: `Bearer ${token}`,
+                },
+            }
+            );
+
+            if (!response.ok) {
+            throw new Error(
+                "Failed to load roles"
+            );
+            }
+
+            const data = await response.json();
+
+            const mappedRoles = data.map(
+            (role: any) => ({
+                id: role.id,
+                code: role.name,
+                name: role.display_name,
+                description:
+                role.description || "",
+                users:
+                role.users?.length || 0,
+                permissions:
+                role.permissions?.length || 0,
+                status: "Active",
+            })
+            );
+
+            setRoles(mappedRoles);
+
+        } catch (error) {
+
+            console.error(error);
+
+            toast.error(
+            "Failed to load roles."
+            );
+
+        } finally {
+
+            setLoading(false);
+
+        }
+        };
+
+    const recordsPerPage = 10;
+    const filteredRoles = roles.filter((role) => {
+  const matchesSearch =
+    role.code
+      .toLowerCase()
+      .includes(search.toLowerCase()) ||
+    role.name
+      .toLowerCase()
+      .includes(search.toLowerCase()) ||
+    role.description
+      .toLowerCase()
+      .includes(search.toLowerCase());
+
+  const matchesStatus =
+    statusFilter === "All" ||
+    role.status === statusFilter;
+
+  return matchesSearch && matchesStatus;
+});
+
+const totalPages = Math.ceil(
+  filteredRoles.length / recordsPerPage
+);
+
+const startIndex =
+  (currentPage - 1) * recordsPerPage;
+
+const paginatedRoles =
+  filteredRoles.slice(
+    startIndex,
+    startIndex + recordsPerPage
+  );
+  return (    
+
+  <PermissionGuard
+    permission="permission:read"
+  >
+    <main className="relative flex min-h-screen overflow-hidden bg-gradient-to-b from-[#030B1F] to-[#06153C] text-white">
+
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(59,130,246,0.35),transparent_30%),radial-gradient(circle_at_85%_15%,rgba(34,211,238,0.20),transparent_25%),radial-gradient(circle_at_80%_80%,rgba(99,102,241,0.25),transparent_30%),radial-gradient(circle_at_50%_50%,rgba(37,99,235,0.12),transparent_50%)]" />
+
+      <div
+        className="
+        absolute
+        left-1/2
+        top-1/2
+        h-[1800px]
+        w-[1800px]
+        -translate-x-1/2
+        -translate-y-1/2
+        rounded-full
+        bg-cyan-500/10
+        blur-[260px]
+        "
+      />
+
+      <div className="relative z-10 flex min-h-screen w-full">
+
+        <Sidebar active="roles" />
+
+        <section className="flex-1">
+
+          <Topbar
+            title="Roles"
+            subtitle="Manage system roles and permissions"
+          />
+
+          <div className="p-4">
+
+            <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur-xl">
+
+             <div className="mb-4 grid gap-3 md:grid-cols-4">
+
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                    <p className="text-[11px] text-white/60">
+                    Total Roles
+                    </p>
+
+                    <h3 className="mt-1 text-lg font-semibold text-cyan-300">
+                    {roles.length}
+                    </h3>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                    <p className="text-[11px] text-white/60">
+                    Active
+                    </p>
+
+                    <h3 className="mt-1 text-lg font-semibold text-green-300">
+                    {
+                    roles.filter(
+                        (d) => d.status === "Active"
+                    ).length
+                    }
+                    </h3>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                    <p className="text-[11px] text-white/60">
+                    Inactive
+                    </p>
+
+                    <h3 className="mt-1 text-lg font-semibold text-red-300">
+                    {
+                    roles.filter(
+                        (d) => d.status === "Inactive"
+                    ).length
+                    }
+                    </h3>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                    <p className="text-[11px] text-white/60">
+                    Assigned Users
+                    </p>
+
+                    <h3 className="mt-1 text-lg font-semibold text-cyan-300">
+                    {
+                    roles.reduce(
+                        (total, role) => total + role.users,
+                        0
+                    )
+                    }
+                    </h3>
+                </div>
+
+                </div>
+
+             <div className="mb-4 flex items-center justify-between">
+
+                <div className="flex items-center gap-2">
+
+                    <input
+                        placeholder="Search role..."
+                        value={search}
+                        onChange={(e) => {
+                        setSearch(e.target.value);
+                        setCurrentPage(1);
+                        }}
+                        className="
+                        h-9
+                        w-[220px]
+                        rounded-xl
+                        border
+                        border-white/10
+                        bg-white/10
+                        px-3
+                        text-xs
+                        text-white
+                        "
+                        />
+
+                    <select
+                    value={statusFilter}
+                    onChange={(e) => {
+                    setStatusFilter(e.target.value);
+                    setCurrentPage(1);
+                    }}
+                    className="
+                    h-9
+                    rounded-xl
+                    border
+                    border-white/10
+                    bg-white/10
+                    px-3
+                    text-xs
+                    text-white
+                    "
+                    >
+                    <option
+                        value="All"
+                        className="bg-[#17386E] text-white"
+                        >
+                        All
+                        </option>
+
+                        <option
+                        value="Active"
+                        className="bg-[#17386E] text-white"
+                        >
+                        Active
+                        </option>
+
+                        <option
+                        value="Inactive"
+                        className="bg-[#17386E] text-white"
+                        >
+                        Inactive
+                        </option>
+                    </select>
+
+                </div>
+
+                <div className="ml-auto flex items-center gap-2">
+
+               
+                <button
+                    onClick={() => {
+
+                        setEditingId(null);
+
+                        setRoleForm({
+                            code: "",
+                            name: "",
+                            description: "",
+                            status: "Active",
+                        });
+
+                        setShowModal(true);
+                    }}
+                    className="
+                    h-9
+                    rounded-xl
+                    bg-cyan-500
+                    px-4
+                    text-xs
+                    font-medium
+                    text-black
+                    "
+                    >
+                    + New Role
+                    </button>
+
+                <button
+                    className="
+                    h-9
+                    rounded-xl
+                    border
+                    border-white/10
+                    bg-white/5
+                    px-4
+                    text-xs
+                    text-white
+                    hover:bg-white/10
+                    "
+                    >
+                    Export
+                    </button>
+
+                    </div>
+
+                    </div>
+
+<div className="overflow-x-auto">
+
+                <table className="w-full">
+
+                  <thead>
+                    <tr className="border-b border-white/10">
+                      <th className="p-3 text-left text-xs">
+                        Role Name
+                        </th>
+
+                        <th className="p-3 text-left text-xs">
+                        Description
+                        </th>
+
+                        <th className="p-3 text-left text-xs">
+                        Assigned Users
+                        </th>
+
+                        <th className="p-3 text-left text-xs">
+                        Permissions
+                        </th>
+
+                        <th className="p-3 text-left text-xs">
+                        Status
+                        </th>
+
+                        <th className="p-3 text-left text-xs">
+                        Action
+                        </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+
+                {loading && (
+                <tr>
+                <td
+                colSpan={6}
+                className="p-6 text-center text-xs text-white/60"
+                >
+                Loading roles...
+                </td>
+                </tr>
+                )}
+
+                    {!loading &&
+                    paginatedRoles.map((role) => (
+
+                        <tr
+                        key={role.id}
+                        className="border-b border-white/5"
+                        >
+
+                        <td className="p-3 text-xs">
+                            {role.name}
+                        </td>
+
+                        <td className="p-3 text-xs max-w-[280px] text-white/70">
+                            {role.description}
+                        </td>
+
+                        <td className="p-3 text-xs">
+                            {role.users}
+                        </td>
+
+                        <td className="p-3 text-xs">
+                            {role.permissions}
+                        </td>
+
+                        <td className="p-3 text-xs text-green-300">
+                            {role.status}
+                        </td>
+
+                        <td className="p-3 flex gap-3">
+
+                            <button
+                            onClick={() => {
+
+                            setEditingId(role.id);
+
+                            setRoleForm({
+                                code: role.code,
+                                name: role.name,
+                                description: role.description,
+                                status: role.status,
+                            });
+
+                                setShowModal(true);
+                            }}
+                            className="text-cyan-300 text-xs"
+                            >
+                            Edit
+                            </button>
+
+                            <button
+                            onClick={() => {
+
+                                const hasEmployee =
+                                role.users > 0;
+
+                                if (hasEmployee) {
+
+                                toast.error(
+                                "Role cannot be deleted because users are assigned."
+                                );
+
+                                return;
+                                }
+
+                                setDeleteId(role.id);
+                                if (role.users > 0) {
+
+                                toast.error(
+                                    "Role cannot be deleted because users are assigned."
+                                );
+
+                                return;
+                                }
+
+                                setDeleteId(role.id);
+                            }}
+                            className="text-red-300 text-xs"
+                            >
+                            Delete
+                            </button>
+
+                        </td>
+
+                        </tr>
+
+                    ))}
+
+                    </tbody>
+
+                </table>
+
+                <div className="mt-4 flex items-center justify-between">
+
+                    <p className="text-xs text-white/60">
+                        Showing {startIndex + 1} -
+                        {Math.min(
+                        startIndex + recordsPerPage,
+                        filteredRoles.length
+                        )} of {filteredRoles.length}
+                    </p>
+
+                    <div className="flex items-center gap-1">
+
+                        <button
+                        disabled={currentPage === 1}
+                        onClick={() =>
+                            setCurrentPage(currentPage - 1)
+                        }
+                        className="
+                        h-8
+                        px-3
+                        rounded-lg
+                        border
+                        border-white/10
+                        bg-white/5
+                        text-xs
+                        disabled:opacity-40
+                        "
+                        >
+                        Previous
+                        </button>
+
+                        {Array.from(
+                        { length: totalPages },
+                        (_, i) => (
+                            <button
+                            key={i}
+                            onClick={() =>
+                                setCurrentPage(i + 1)
+                            }
+                            className={`
+                            h-8
+                            min-w-[32px]
+                            rounded-lg
+                            text-xs
+                            ${
+                                currentPage === i + 1
+                                ? "bg-cyan-500 text-black"
+                                : "bg-white/5"
+                            }
+                            `}
+                            >
+                            {i + 1}
+                            </button>
+                        )
+                        )}
+
+                        <button
+                        disabled={currentPage === totalPages}
+                        onClick={() =>
+                            setCurrentPage(currentPage + 1)
+                        }
+                        className="
+                        h-8
+                        px-3
+                        rounded-lg
+                        border
+                        border-white/10
+                        bg-white/5
+                        text-xs
+                        disabled:opacity-40
+                        "
+                        >
+                        Next
+                        </button>
+
+                    </div>
+
+                    </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+          {showModal && (
+
+            <div
+                className="
+                fixed
+                inset-0
+                z-50
+                flex
+                items-center
+                justify-center
+                bg-black/60
+                backdrop-blur-sm
+                "
+            >
+
+                <div
+                className="
+                w-full
+                max-w-2xl
+                rounded-3xl
+                border
+                border-white/10
+                bg-[#102E67]
+                p-5
+                shadow-2xl
+                "
+                >
+
+                <div className="mb-4 flex items-center justify-between">
+
+                    <h2 className="text-lg font-semibold">
+                    Create Role
+                    </h2>
+
+                    <button
+                    onClick={() => {
+
+                        setEditingId(null);
+
+                        setRoleForm({
+                        code: "",
+                        name: "",
+                        description: "",
+                        status: "Active",
+                    });
+
+                    setShowModal(false);
+                    }}
+                    className="text-white/60"
+                    >
+                    ✕
+                    </button>
+
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+
+                    <div>
+                    <label className="mb-2 block text-xs text-white/60">
+                        Role Code *
+                    </label>
+
+                    <input
+                    value={roleForm.code}
+                    onChange={(e) =>
+                        setRoleForm({
+                        ...roleForm,
+                        code: e.target.value,
+                        })
+                    }
+                    className="
+                        w-full
+                        rounded-xl
+                        border
+                        border-white/10
+                        bg-white/10
+                        px-3
+                        py-2
+                        text-xs
+                        "
+                    />
+                    </div>
+
+                    <div>
+                    <label className="mb-2 block text-xs text-white/60">
+                        Role Name *
+                    </label>
+
+                    <input
+                        value={roleForm.name}
+                        onChange={(e) =>
+                            setRoleForm({
+                            ...roleForm,
+                            name: e.target.value,
+                            })
+                        }
+                        className="
+                        w-full
+                        rounded-xl
+                        border
+                        border-white/10
+                        bg-white/10
+                        px-3
+                        py-2
+                        text-xs
+                        "
+                    />
+                    </div>
+
+                    <div>
+                        <label className="mb-2 block text-xs text-white/60">
+                            Description
+                        </label>
+
+                        <textarea
+                            rows={3}
+                            value={roleForm.description}
+                            onChange={(e) =>
+                                setRoleForm({
+                                    ...roleForm,
+                                    description: e.target.value,
+                                })
+                            }
+                            className="
+                            w-full
+                            rounded-xl
+                            border
+                            border-white/10
+                            bg-white/10
+                            px-3
+                            py-2
+                            text-xs
+                            resize-none
+                            "
+                        />
+                    </div>
+
+                    <div>
+                    <label className="mb-2 block text-xs text-white/60">
+                        Status
+                    </label>
+
+                    <select
+                    value={roleForm.status}
+                    onChange={(e) =>
+                        setRoleForm({
+                        ...roleForm,
+                        status: e.target.value,
+                        })
+                    }
+                    className="
+                    w-full
+                    rounded-xl
+                    border
+                    border-white/10
+                    bg-[#35538F]
+                    px-3
+                    py-2
+                    text-xs
+                    "
+                    >
+                        <option>Active</option>
+                        <option>Inactive</option>
+                    </select>
+                    </div>
+
+                </div>
+
+                <div className="mt-5 flex justify-end gap-2">
+
+                    <button
+                    onClick={() => {
+
+                        setEditingId(null);
+
+                        setRoleForm({
+                        code: "",
+                        name: "",
+                        description: "",
+                        status: "Active",
+                    });
+
+                        setShowModal(false);
+                    }}
+                    className="
+                    rounded-xl
+                    border
+                    border-white/10
+                    px-4
+                    py-2
+                    text-xs
+                    "
+                    >
+                    Cancel
+                    </button>
+
+                    <button
+                    onClick={async () => {
+
+                        if (!roleForm.code || !roleForm.name) {
+
+                            toast.error(
+                                "Role Code and Name are required."
+                            );
+
+                            return;
+                        }
+
+                        try {
+
+                            const token =
+                            localStorage.getItem("access_token");
+
+                            if (editingId) {
+
+                                const response = await fetch(
+                                    `http://localhost:8000/api/roles/${editingId}`,
+                                    {
+                                        method: "PUT",
+                                        headers: {
+                                            "Content-Type":
+                                            "application/json",
+                                            Authorization:
+                                            `Bearer ${token}`,
+                                        },
+                                        body: JSON.stringify({
+                                            display_name:
+                                            roleForm.name,
+                                            description:
+                                            roleForm.description,
+                                        }),
+                                    }
+                                );
+
+                                if (!response.ok) {
+                                    throw new Error();
+                                }
+
+                                toast.success(
+                                    "Role updated successfully."
+                                );
+
+                            } else {
+
+                                const response = await fetch(
+                                    "http://localhost:8000/api/roles",
+                                    {
+                                        method: "POST",
+                                        headers: {
+                                            "Content-Type":
+                                            "application/json",
+                                            Authorization:
+                                            `Bearer ${token}`,
+                                        },
+                                        body: JSON.stringify({
+                                            name: roleForm.code,
+                                            display_name:
+                                            roleForm.name,
+                                            description:
+                                            roleForm.description,
+                                        }),
+                                    }
+                                );
+
+                                if (!response.ok) {
+                                    throw new Error();
+                                }
+
+                                toast.success(
+                                    "Role created successfully."
+                                );
+                            }
+
+                            await loadRoles();
+
+                            setRoleForm({
+                                code: "",
+                                name: "",
+                                description: "",
+                                status: "Active",
+                            });
+
+                            setEditingId(null);
+                            setShowModal(false);
+
+                        } catch {
+
+                            toast.error(
+                                editingId
+                                ? "Failed to update role."
+                                : "Failed to create role."
+                            );
+                        }
+                    }}
+                    className="
+                    rounded-xl
+                    bg-cyan-500
+                    px-4
+                    py-2
+                    text-xs
+                    font-medium
+                    text-black
+                    "
+                    >
+                    {editingId ? "Update Role" : "Save Role"}
+                    
+                    </button>
+                    
+
+                </div>
+
+                </div>
+
+            </div>
+
+            )}
+
+            {deleteId && (
+
+            <div
+                className="
+                fixed
+                inset-0
+                z-50
+                flex
+                items-center
+                justify-center
+                bg-black/60
+                backdrop-blur-sm
+                "
+            >
+
+                <div
+                className="
+                w-full
+                max-w-md
+                rounded-3xl
+                border
+                border-red-500/20
+                bg-[#102E67]
+                p-5
+                shadow-2xl
+                "
+                >
+
+                <h2 className="text-lg font-semibold text-white">
+                    Delete Role
+                </h2>
+
+                <p className="mt-3 text-sm text-white/70">
+                    Are you sure you want to delete this
+                    role?
+                </p>
+
+                <p className="mt-1 text-xs text-red-300">
+                    This action cannot be undone.
+                </p>
+
+                <div className="mt-5 flex justify-end gap-2">
+
+                    <button
+                    onClick={() =>
+                        setDeleteId(null)
+                    }
+                    className="
+                    rounded-xl
+                    border
+                    border-white/10
+                    px-4
+                    py-2
+                    text-xs
+                    "
+                    >
+                    Cancel
+                    </button>
+
+                    <button
+                    onClick={async () => {
+
+                    try {
+
+                        const token =
+                        localStorage.getItem(
+                            "access_token"
+                        );
+
+                        const response =
+                        await fetch(
+                            `http://localhost:8000/api/roles/${deleteId}`,
+                            {
+                                method: "DELETE",
+                                headers: {
+                                    Authorization:
+                                    `Bearer ${token}`,
+                                },
+                            }
+                        );
+
+                        if (!response.ok) {
+                            throw new Error();
+                        }
+
+                        await loadRoles();
+
+                        toast.success(
+                            "Role deleted successfully."
+                        );
+
+                        setDeleteId(null);
+
+                    } catch {
+
+                        toast.error(
+                            "Failed to delete role."
+                        );
+                    }
+                }}
+                    className="
+                    rounded-xl
+                    bg-red-500
+                    px-4
+                    py-2
+                    text-xs
+                    font-medium
+                    text-white
+                    "
+                    >
+                    Delete
+                    </button>
+
+                </div>
+
+                </div>
+
+            </div>
+
+            )}
+          
+
+        </section>
+
+      </div>
+
+    </main>
+    </PermissionGuard>
+  );
+}

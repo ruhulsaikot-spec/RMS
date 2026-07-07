@@ -1,0 +1,3 @@
+"""
+RMS Authentication Module
+"""
