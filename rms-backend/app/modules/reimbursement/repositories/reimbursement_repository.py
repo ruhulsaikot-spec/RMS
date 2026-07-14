@@ -172,6 +172,8 @@ class ReimbursementRepository:
             .options(
                 selectinload(
                     ReimbursementApproval.application
+                ).selectinload(
+                    ReimbursementApplication.employee
                 )
             )
             .where(
@@ -182,7 +184,7 @@ class ReimbursementRepository:
                 == "PENDING",
             )
         )
-
+        
         return result.scalars().all()
 
     @staticmethod
@@ -240,6 +242,10 @@ class ReimbursementRepository:
                 ).selectinload(
                     User.designation
                 ),
+
+                selectinload(
+                    ReimbursementApplication.expense_items
+                ),
             )
             .where(
                 ReimbursementApplication.employee_id
@@ -294,11 +300,13 @@ class ReimbursementRepository:
                 ).selectinload(
                     User.department
                 ),
-
                 selectinload(
                     ReimbursementApplication.employee
                 ).selectinload(
                     User.designation
+                ),
+                selectinload(
+                    ReimbursementApplication.expense_items
                 ),
             )
             .where(

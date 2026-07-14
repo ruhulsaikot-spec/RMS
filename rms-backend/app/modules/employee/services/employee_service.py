@@ -146,9 +146,9 @@ class EmployeeService:
                         )
 
             user.manager_id = manager_user_id
-
+            
             await db.commit()
-
+        await db.refresh(updated_employee)
         return updated_employee
 
     @staticmethod

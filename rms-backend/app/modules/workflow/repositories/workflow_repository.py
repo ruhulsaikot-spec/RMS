@@ -167,6 +167,10 @@ class WorkflowRepository:
                 ),
 
                 selectinload(
+                    WorkflowDefinition.company
+                ),
+
+                selectinload(
                     WorkflowDefinition.steps
                 ).selectinload(
                     WorkflowStep.approval_group
@@ -199,6 +203,10 @@ class WorkflowRepository:
                     WorkflowDefinition.expense_types
                 ).selectinload(
                     WorkflowDefinitionExpenseType.reimbursement_type
+                ),
+
+                selectinload(
+                    WorkflowDefinition.company
                 ),
 
                 selectinload(
@@ -259,11 +267,42 @@ class WorkflowRepository:
         db: AsyncSession,
         workflow_definition,
     ):
-        workflow_definition.is_deleted = True
+        from sqlalchemy import delete, text
+        # Delete related approvals first
+        await db.execute(
+            text("""
+                DELETE FROM reimbursement_approvals
+                WHERE workflow_step_id IN (
+                    SELECT id FROM workflow_steps
+                    WHERE workflow_id = :workflow_id
+                )
+            """),
+            {"workflow_id": str(workflow_definition.id)}
+        )
+        await db.execute(
+            text("DELETE FROM workflow_steps WHERE workflow_id = :workflow_id"),
+            {"workflow_id": str(workflow_definition.id)}
+        )
+        await db.execute(
+            text("DELETE FROM workflow_definition_expense_types WHERE workflow_id = :workflow_id"),
+            {"workflow_id": str(workflow_definition.id)}
+        )
+        from sqlalchemy import text as sa_text
+        # Check if workflow is referenced by any applications
+        check = await db.execute(
+            sa_text("SELECT COUNT(*) FROM reimbursement_applications WHERE workflow_definition_id = :workflow_id AND is_deleted = false"),
+            {"workflow_id": str(workflow_definition.id)}
+        )
+        count = check.scalar()
+        if count > 0:
+            raise ValueError(f"This workflow is in use by {count} application(s) and cannot be deleted.")
 
+        await db.execute(
+            text("DELETE FROM workflow_definitions WHERE id = :workflow_id"),
+            {"workflow_id": str(workflow_definition.id)}
+        )
         await db.commit()
-
-        return workflow_definition
+        return {"message": "Workflow deleted successfully"}
 
     @staticmethod
     async def create_workflow_step(
@@ -312,11 +351,10 @@ class WorkflowRepository:
         db: AsyncSession,
         workflow_step,
     ):
+
         await db.commit()
 
-        await db.refresh(
-            workflow_step
-        )
+        await db.refresh(workflow_step)
 
         return workflow_step
 
@@ -335,22 +373,43 @@ class WorkflowRepository:
     async def get_matching_workflow_definition(
         db: AsyncSession,
         amount: float,
+        expense_type_ids: list[str] = [],
     ):
+        from app.modules.workflow.models.workflow import WorkflowDefinitionExpenseType
+
+        # Try matching by expense type and amount first
+        if expense_type_ids:
+            for expense_type_id in expense_type_ids:
+                result = await db.execute(
+                    select(WorkflowDefinition)
+                    .join(
+                        WorkflowDefinitionExpenseType,
+                        WorkflowDefinitionExpenseType.workflow_id == WorkflowDefinition.id,
+                    )
+                    .where(
+                        WorkflowDefinitionExpenseType.reimbursement_type_id == expense_type_id,
+                        WorkflowDefinitionExpenseType.is_deleted == False,
+                        WorkflowDefinition.min_amount <= amount,
+                        WorkflowDefinition.max_amount >= amount,
+                        WorkflowDefinition.is_active == True,
+                        WorkflowDefinition.is_deleted == False,
+                    )
+                )
+                match = result.scalars().first()
+                if match:
+                    return match
+
+        # Fallback: match by amount only (default workflow)
         result = await db.execute(
             select(WorkflowDefinition).where(
-                WorkflowDefinition.min_amount
-                <= amount,
-
-                WorkflowDefinition.max_amount
-                >= amount,
-
+                WorkflowDefinition.min_amount <= amount,
+                WorkflowDefinition.max_amount >= amount,
                 WorkflowDefinition.is_active == True,
 
                 WorkflowDefinition.is_deleted == False,
             )
         )
-
-        return result.scalar_one_or_none()  
+        return result.scalars().first() 
 
     @staticmethod
     async def get_first_workflow_step(

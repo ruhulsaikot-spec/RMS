@@ -24,6 +24,7 @@ from app.modules.reimbursement.schemas.reimbursement_schema import (
     ReimbursementApplicationCreate,
     ReimbursementApplicationResponse,
     ReimbursementApplicationDetailResponse,
+    ReimbursementApplicationUpdate,
     ApprovalActionRequest,
     PendingApprovalResponse,
     FinanceReviewRequest,
@@ -92,6 +93,36 @@ async def get_reimbursement_application_by_id(
         db,
         application_id,
         current_user,
+    )
+
+@router.delete(
+    "/{application_id}",
+)
+async def delete_reimbursement_application(
+    application_id: str,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    return await ReimbursementService.delete_application(
+        db=db,
+        application_id=application_id,
+        employee_id=current_user["id"],
+    )
+
+@router.put(
+    "/{application_id}",
+)
+async def update_reimbursement_application(
+    application_id: str,
+    payload: ReimbursementApplicationUpdate,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    return await ReimbursementService.update_application(
+        db=db,
+        application_id=application_id,
+        payload=payload,
+        employee_id=current_user["id"],
     )
 
 @router.post(

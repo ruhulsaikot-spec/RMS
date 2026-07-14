@@ -25,6 +25,7 @@ class ReimbursementTypeResponse(BaseModel):
     )
 class WorkflowDefinitionCreate(BaseModel):
     name: str
+    company_id: str
     reimbursement_type_ids: list[str]
     module_name: str
     min_amount: float
@@ -34,6 +35,8 @@ class WorkflowDefinitionCreate(BaseModel):
 
 class WorkflowDefinitionUpdate(BaseModel):
     name: str | None = None
+
+    company_id: str | None = None
 
     reimbursement_type_ids: list[str] | None = None
 
@@ -48,6 +51,7 @@ class WorkflowDefinitionUpdate(BaseModel):
 class WorkflowDefinitionResponse(BaseModel):
     id: str
     name: str
+    company_id: str | None = None
     reimbursement_type_ids: list[str]
     module_name: str
     min_amount: float
@@ -84,6 +88,26 @@ class WorkflowStepCreate(BaseModel):
 
     is_payment_step: bool = False
 
+    email_notification: bool = True
+
+    in_app_notification: bool = True
+
+    sla_enabled: bool = False
+
+    sla_hours: int | None = None
+
+    escalation_enabled: bool = False
+
+    escalation_hours: int | None = None
+
+    escalation_group: str | None = None
+
+    allowed_actions: list[str] | None = None
+
+    remarks_required: dict | None = None
+
+    applicant_notification: dict | None = None
+
 
 class WorkflowStepUpdate(BaseModel):
     step_order: int | None = None
@@ -106,6 +130,26 @@ class WorkflowStepUpdate(BaseModel):
     is_finance_step: bool | None = None
 
     is_payment_step: bool | None = None
+
+    email_notification: bool | None = None
+
+    in_app_notification: bool | None = None
+
+    sla_enabled: bool | None = None
+
+    sla_hours: int | None = None
+
+    escalation_enabled: bool | None = None
+
+    escalation_hours: int | None = None
+
+    escalation_group: str | None = None
+
+    allowed_actions: list[str] | None = None
+
+    remarks_required: dict | None = None
+
+    applicant_notification: dict | None = None
 
 
 class WorkflowStepResponse(BaseModel):
@@ -134,6 +178,26 @@ class WorkflowStepResponse(BaseModel):
     is_finance_step: bool
 
     is_payment_step: bool
+
+    email_notification: bool
+
+    in_app_notification: bool
+
+    sla_enabled: bool
+
+    sla_hours: int | None = None
+
+    escalation_enabled: bool
+
+    escalation_hours: int | None = None
+
+    escalation_group: str | None = None
+
+    allowed_actions: list[str] | None = None
+
+    remarks_required: dict | None = None
+
+    applicant_notification: dict | None = None
 
     model_config = ConfigDict(
         from_attributes=True,

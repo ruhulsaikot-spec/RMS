@@ -41,15 +41,38 @@ from app.modules.reimbursement.schemas.reimbursement_schema import (
 class ReimbursementService:
 
     @staticmethod
+    async def _generate_application_no(db: AsyncSession) -> str:
+        from sqlalchemy import text
+        now = datetime.now(UTC)
+        prefix = f"CLM-{now.strftime('%y%m')}"
+        result = await db.execute(
+            text(
+                "SELECT COUNT(*) FROM reimbursement_applications "
+                "WHERE application_no LIKE :prefix"
+            ),
+            {"prefix": f"{prefix}%"},
+        )
+        count = result.scalar() or 0
+        serial = str(count + 1).zfill(4)
+        return f"{prefix}{serial}"
+
+    @staticmethod
     async def create_application(
         db: AsyncSession,
         payload: ReimbursementApplicationCreate,
         employee_id: str,
     ):
 
+        expense_type_ids = list(set([
+            item.claim_type
+            for item in payload.expense_items
+            if item.claim_type
+        ]))
+
         workflow = await WorkflowRepository.get_matching_workflow_definition(
             db,
             payload.requested_amount,
+            expense_type_ids,
         )
 
         if not workflow:
@@ -68,7 +91,7 @@ class ReimbursementService:
             )
 
         application = ReimbursementApplication(
-            application_no=f"RMS-{uuid.uuid4().hex[:8].upper()}",
+            application_no=await ReimbursementService._generate_application_no(db),
             employee_id=employee_id,
             reimbursement_type_id=payload.reimbursement_type_id,
             workflow_definition_id=workflow.id,
@@ -192,11 +215,25 @@ class ReimbursementService:
 
             if "finance" in roles:
 
-                applications = (
+                finance_applications = (
                     await ReimbursementRepository.get_finance_applications(
                         db,
                     )
                 )
+
+                own_applications = (
+                    await ReimbursementRepository.get_applications_by_employee(
+                        db,
+                        current_user["id"],
+                    )
+                )
+
+                seen_ids = set()
+                applications = []
+                for app in finance_applications + own_applications:
+                    if app.id not in seen_ids:
+                        seen_ids.add(app.id)
+                        applications.append(app)
 
             else:
 
@@ -228,13 +265,18 @@ class ReimbursementService:
                         else None
                     ),
                     "finance_adjustment_reason": app.finance_adjustment_reason,
-
+                    "created_at": app.created_at.isoformat() if app.created_at else None,
+                    "claim_types": list(set([
+                        item.claim_type
+                        for item in (getattr(app, 'expense_items', None) or [])
+                        if item.claim_type
+                    ])),
+                    "claim_types_debug": str([(item.claim_type, item.id) for item in (getattr(app, 'expense_items', None) or [])]),
                     "employee_name": (
                         app.employee.full_name
                         if app.employee
                         else None
                     ),
-
                     "department_name": (
                         app.employee.department.name
                         if app.employee
@@ -255,24 +297,70 @@ class ReimbursementService:
         if current_user.get(
             "is_superuser"
         ):
-            return await ReimbursementRepository.get_all_applications(
+            applications = await ReimbursementRepository.get_all_applications(
                 db,
             )
 
-        roles = current_user.get(
-            "roles",
-            [],
-        )
+        else:
 
-        if "finance" in roles:
-            return await ReimbursementRepository.get_finance_applications(
-                db,
+            roles = current_user.get(
+                "roles",
+                [],
             )
 
-        return await ReimbursementRepository.get_applications_by_employee(
-            db,
-            current_user["id"],
-        )
+            if "finance" in roles:
+
+                finance_applications = await ReimbursementRepository.get_finance_applications(
+                    db,
+                )
+
+                own_applications = await ReimbursementRepository.get_applications_by_employee(
+                    db,
+                    current_user["id"],
+                )
+
+                seen_ids = set()
+                applications = []
+                for app in finance_applications + own_applications:
+                    if app.id not in seen_ids:
+                        seen_ids.add(app.id)
+                        applications.append(app)
+
+            else:
+
+                applications = await ReimbursementRepository.get_applications_by_employee(
+                    db,
+                    current_user["id"],
+                )
+
+        response = []
+
+        for app in applications:
+
+            response.append(
+                {
+                    "id": app.id,
+                    "application_no": app.application_no,
+                    "employee_id": app.employee_id,
+                    "reimbursement_type_id": app.reimbursement_type_id,
+                    "workflow_definition_id": app.workflow_definition_id,
+                    "status": app.status,
+                    "requested_amount": float(app.requested_amount or 0),
+                    "verified_amount": float(app.verified_amount) if app.verified_amount else None,
+                    "finance_adjustment_reason": app.finance_adjustment_reason,
+                    "created_at": app.created_at.isoformat() if app.created_at else None,
+                    "claim_types": list(set([
+                        item.claim_type
+                        for item in (getattr(app, 'expense_items', None) or [])
+                        if item.claim_type
+                    ])) if getattr(app, 'expense_items', None) else [],
+                    "employee_name": app.employee.full_name if app.employee else None,
+                    "department_name": app.employee.department.name if app.employee and app.employee.department else None,
+                    "designation_name": app.employee.designation.name if app.employee and app.employee.designation else None,
+                }
+            )
+
+        return response
 
     @staticmethod    
     async def get_application_by_id(
@@ -337,142 +425,233 @@ class ReimbursementService:
             print("AUTHORIZED =>", authorized)
 
         if not authorized:
-
             raise ValueError(
                 "You are not authorized to view this application"
             )
-                
-        approvals = (
-            await ReimbursementRepository.get_approvals_by_user(
-                db,
-                current_user["id"],
+
+        attachments = []
+        for item in application.attachments:
+            attachments.append(
+                {
+                    "id": item.id,
+                    "file_name": item.file_name,
+                    "file_url": item.file_path,
+                    "file_size": "",
+                }
+            )
+        workflow_actions = [
+            {"action_code": "APPROVE", "action_name": "Approve"},
+            {"action_code": "REJECT", "action_name": "Reject"},
+            {"action_code": "BACK", "action_name": "Back To Previous Stage"},
+            {"action_code": "RETURN", "action_name": "Back To Applicant"},
+            {"action_code": "VERIFY", "action_name": "Verification"},
+            {"action_code": "PAY", "action_name": "Payment"},
+        ]
+
+        approval_history = []
+        for item in application.approvals:
+            approval_history.append(
+                {
+                    "stage_name": (
+                        f"Step {item.workflow_step.step_order}"
+                        if item.workflow_step
+                        else "-"
+                    ),
+                    "action": item.action,
+                    "user_name": (
+                        application.data.full_name
+                        if application.data
+                        else "-"
+                    ),
+                    "comments": item.remarks,
+                    "action_date": (
+                        str(item.action_at)
+                        if item.action_at
+                        else ""
+                    ),
+                }
+            )
+
+        data_obj = application.data
+        return {
+            "id": application.id,
+            "application_no": application.application_no,
+            "employee_id": application.employee_id,
+            "reimbursement_type_id": application.reimbursement_type_id,
+            "workflow_definition_id": application.workflow_definition_id,
+            "status": application.status,
+            "requested_amount": float(application.requested_amount or 0),
+            "verified_amount": float(application.verified_amount) if application.verified_amount else None,
+            "paid_amount": float(application.paid_amount or 0),
+            "finance_adjustment_reason": application.finance_adjustment_reason,
+            "created_at": application.created_at.isoformat() if application.created_at else None,
+            "data": {
+                "application_type": data_obj.application_type if data_obj else None,
+                "full_name": data_obj.full_name if data_obj else None,
+                "email": data_obj.email if data_obj else None,
+                "department": data_obj.department if data_obj else None,
+                "designation": data_obj.designation if data_obj else None,
+                "purpose": data_obj.purpose if data_obj else None,
+                "remarks": data_obj.remarks if data_obj else None,
+            } if data_obj else None,
+            "employee_name": (
+                application.employee.full_name
+                if application.employee
+                else application.data.full_name
+                if application.data
+                else None
+            ),
+            "employee_email": (
+                application.employee.email
+                if application.employee
+                else application.data.email
+                if application.data
+                else None
+            ),
+            "department_name": (
+                application.data.department
+                if application.data
+                else None
+            ),
+            "designation_name": (
+                application.data.designation
+                if application.data
+                else None
+            ),
+            "paid_amount": float(application.paid_amount or 0),
+            "expense_items": [
+                {
+                    "expense_date": item.expense_date,
+                    "claim_type": item.claim_type,
+                    "purpose": item.purpose,
+                    "mode": item.mode,
+                    "project": item.project,
+                    "from_location": item.from_location,
+                    "to_location": item.to_location,
+                    "amount": float(item.amount or 0),
+                }
+                for item in application.expense_items
+            ],
+            "attachments": attachments,
+            "workflow_actions": workflow_actions,
+            "approval_history": approval_history,
+        }
+        
+
+    @staticmethod
+    async def delete_application(
+        db: AsyncSession,
+        application_id: str,
+        employee_id: str,
+    ):
+        application = await ReimbursementRepository.get_application_by_id(
+            db, application_id
+        )
+
+        if not application:
+            raise ValueError("Application not found")
+
+        if application.employee_id != employee_id:
+            raise ValueError("You are not authorized to delete this application")
+
+        if application.status != "DRAFT":
+            raise ValueError("Only DRAFT applications can be deleted")
+
+        application.is_deleted = True
+
+        await db.commit()
+
+        return {"message": "Application deleted successfully"}
+
+    @staticmethod
+    async def update_application(
+        db: AsyncSession,
+        application_id: str,
+        payload: any,
+        employee_id: str,
+    ):
+        from sqlalchemy import delete as sa_delete
+        from app.modules.reimbursement.models.reimbursement import ReimbursementExpenseItem, ReimbursementAttachment
+        from app.modules.file.models.file import UploadedFile
+
+        application = await ReimbursementRepository.get_application_by_id(
+            db, application_id
+        )
+
+        print(f"UPDATE: application found={application is not None}, employee_id={employee_id}")
+        if not application:
+            raise ValueError("Application not found")
+        print(f"UPDATE: app.employee_id={application.employee_id}, employee_id={employee_id}, match={application.employee_id == employee_id}")
+        if application.employee_id != employee_id:
+            raise ValueError("You are not authorized to update this application")
+        print(f"UPDATE: status={application.status}")
+        if application.status != "DRAFT":
+            raise ValueError("Only DRAFT applications can be updated")
+        print(f"UPDATE PAYLOAD: attachment_ids={payload.attachment_ids}, expense_items count={len(payload.expense_items)}")
+
+        if payload.requested_amount is not None:
+            application.requested_amount = payload.requested_amount
+
+        if payload.remarks is not None:
+            if application.data:
+                application.data.remarks = payload.remarks
+
+        # Delete existing expense items
+        await db.execute(
+            sa_delete(ReimbursementExpenseItem).where(
+                ReimbursementExpenseItem.application_id == application_id
             )
         )
 
-        for approval in approvals:
-            if approval.application_id == application_id:
-                attachments = []
-
-                for item in application.attachments:
-
-                    attachments.append(
-                        {
-                            "id": item.id,
-                            "file_name": item.file_name,
-                            "file_url": item.file_path,
-                            "file_size": "",
-                        }
-                    )
-                workflow_actions = [
-                    {
-                        "action_code": "APPROVE",
-                        "action_name": "Approve",
-                    },
-                    {
-                        "action_code": "REJECT",
-                        "action_name": "Reject",
-                    },
-                    {
-                        "action_code": "BACK",
-                        "action_name": "Back To Previous Stage",
-                    },
-                    {
-                        "action_code": "RETURN",
-                        "action_name": "Back To Applicant",
-                    },
-                    {
-                        "action_code": "VERIFY",
-                        "action_name": "Verification",
-                    },
-                    {
-                        "action_code": "PAY",
-                        "action_name": "Payment",
-                    },
-                ]
-
-                approval_history = []
-
-                for item in application.approvals:
-
-                    approval_history.append(
-                        {
-                            "stage_name": (
-                                f"Step {item.workflow_step.step_order}"
-                                if item.workflow_step
-                                else "-"
-                            ),
-
-                            "action": item.action,
-
-                            "user_name": (
-                                application.data.full_name
-                                if application.data
-                                else "-"
-                            ),
-
-                            "comments": item.remarks,
-
-                            "action_date": (
-                                str(item.action_at)
-                                if item.action_at
-                                else ""
-                            ),
-                        }
-                    )
-
-                return {
-                    **application.__dict__,
-
-                    "employee_name": (
-                        application.employee.full_name
-                        if application.employee
-                        else application.data.full_name
-                        if application.data
-                        else None
-                    ),
-
-                    "department_name": (
-                        application.data.department
-                        if application.data
-                        else None
-                    ),
-
-                    "designation_name": (
-                        application.data.designation
-                        if application.data
-                        else None
-                    ),
-
-                    "paid_amount": float(
-                        application.paid_amount or 0
-                    ),
-
-                    "expense_items": [
-
-                        {
-                            "expense_date": item.expense_date,
-                            "claim_type": item.claim_type,
-                            "purpose": item.purpose,
-                            "mode": item.mode,
-                            "project": item.project,
-                            "from_location": item.from_location,
-                            "to_location": item.to_location,
-                            "amount": float(item.amount or 0),
-                        }
-
-                        for item in application.expense_items
-                    ],
-
-                    "attachments": attachments,
-
-                    "workflow_actions": workflow_actions,
-
-                    "approval_history": approval_history,
-                }
-
-        raise ValueError(
-            "You are not authorized to view this application"
+        await db.execute(
+            sa_delete(ReimbursementAttachment).where(
+                ReimbursementAttachment.application_id == application_id
+            )
         )
+
+        # Re-add existing attachments that were not deleted
+        for existing_att in payload.existing_attachment_paths:
+            attachment = ReimbursementAttachment(
+                application_id=application_id,
+                file_name=existing_att.get("file_name", ""),
+                file_path=existing_att.get("file_path", ""),
+            )
+            db.add(attachment)
+
+        # Add new uploaded files
+        for file_id in payload.attachment_ids:
+            uploaded_file = await db.get(UploadedFile, str(file_id))
+            if uploaded_file:
+                attachment = ReimbursementAttachment(
+                    application_id=application_id,
+                    file_name=uploaded_file.original_name,
+                    file_path=uploaded_file.storage_path,
+                )
+                db.add(attachment)
+
+        # Add new expense items
+        total_amount = 0
+        for item in payload.expense_items:
+            expense_item = ReimbursementExpenseItem(
+                application_id=application_id,
+                expense_date=item.expense_date,
+                claim_type=item.claim_type,
+                purpose=item.purpose,
+                mode=item.mode,
+                project=item.project,
+                from_location=item.from_location,
+                to_location=item.to_location,
+                amount=item.amount,
+            )
+            db.add(expense_item)
+            total_amount += float(item.amount or 0)
+
+        application.requested_amount = total_amount
+
+        await db.commit()
+
+        return {"message": "Application updated successfully", "id": application_id}
+
     @staticmethod
     async def submit_application(
         db: AsyncSession,
@@ -1116,11 +1295,13 @@ class ReimbursementService:
                     "application_id": application.id,
                     "application_no": application.application_no,
                     "employee_id": application.employee_id,
+                    "employee_name": application.employee.full_name if application.employee else None,
                     "requested_amount": float(
                         application.requested_amount
                     ),
                     "status": application.status,
+                    "created_at": application.created_at.isoformat() if application.created_at else None,
                 }
             )
-
+            
         return response

@@ -50,7 +50,7 @@ async def list_employees(
 
 @router.put(
     "/{employee_id}",
-    response_model=EmployeeResponse,
+    
 )
 async def update_employee(
     employee_id: str,

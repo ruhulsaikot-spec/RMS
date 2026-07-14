@@ -59,17 +59,31 @@ async def generic_exception_handler(
     )
 
 
+async def value_error_handler(
+    request: Request,
+    exc: ValueError,
+):
+    return JSONResponse(
+        status_code=400,
+        content={
+            "success": False,
+            "detail": str(exc),
+        },
+    )
+
 def register_exception_handlers(app):
     app.add_exception_handler(
         RMSBaseException,
         rms_exception_handler,
     )
-
     app.add_exception_handler(
         RequestValidationError,
         validation_exception_handler,
     )
-
+    app.add_exception_handler(
+        ValueError,
+        value_error_handler,
+    )
     app.add_exception_handler(
         Exception,
         generic_exception_handler,

@@ -4,6 +4,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     ForeignKey,
+    JSON,
 )
 
 from sqlalchemy.orm import (
@@ -34,6 +35,15 @@ class WorkflowDefinition(BaseModel):
     module_name: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
+    )
+
+    company_id: Mapped[str | None] = mapped_column(
+        ForeignKey("companies.id"),
+        nullable=True,
+    )
+
+    company = relationship(
+        "Company",
     )
 
     min_amount: Mapped[float] = mapped_column(
@@ -155,6 +165,56 @@ class WorkflowStep(BaseModel):
     is_payment_step: Mapped[bool] = mapped_column(
         Boolean,
         default=False,
+    )
+
+    email_notification: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+    )
+
+    in_app_notification: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+    )
+
+    sla_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+    )
+
+    sla_hours: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    escalation_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+    )
+
+    escalation_hours: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    escalation_group: Mapped[str | None] = mapped_column(
+        String(200),
+        nullable=True,
+    )
+
+    allowed_actions: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+
+    remarks_required: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+
+    applicant_notification: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
     )
 
     role = relationship(

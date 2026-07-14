@@ -102,6 +102,21 @@ async def create_workflow_definition(
 
 
 @router.get(
+    "/match",
+)
+async def get_matching_workflow(
+    amount: float,
+    expense_type_ids: str = "",
+    db: AsyncSession = Depends(get_db),
+):
+    ids = [i for i in expense_type_ids.split(",") if i] if expense_type_ids else []
+    return await WorkflowService.get_matching_workflow(
+        db=db,
+        amount=amount,
+        expense_type_ids=ids,
+    )
+
+@router.get(
     "/definitions",
 )
 async def get_workflow_definitions(

@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
@@ -102,9 +102,10 @@ class ReimbursementApplicationResponse(BaseModel):
     employee_name: str | None = None
 
     department_name: str | None = None
-
+    
     designation_name: str | None = None
-
+    created_at: datetime | None = None
+    claim_types: list[str] | None = None
     model_config = ConfigDict(
         from_attributes=True,
     )
@@ -136,6 +137,7 @@ class ReimbursementApplicationDataResponse(BaseModel):
     transport_mode_id: str | None = None
 
     distance: float | None = None
+    remarks: str | None = None
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -173,11 +175,24 @@ class ApprovalHistoryResponse(BaseModel):
     action_date: str | None = None
 
 
+class ExpenseItemResponse(BaseModel):
+    expense_date: date | None = None
+    claim_type: str | None = None
+    purpose: str | None = None
+    mode: str | None = None
+    project: str | None = None
+    from_location: str | None = None
+    to_location: str | None = None
+    amount: float | None = None
+    model_config = ConfigDict(from_attributes=True)
+
 class ReimbursementApplicationDetailResponse(
     ReimbursementApplicationResponse
 ):
 
     employee_name: str | None = None
+
+    employee_email: str | None = None
 
     department_name: str | None = None
 
@@ -185,6 +200,7 @@ class ReimbursementApplicationDetailResponse(
 
     data: ReimbursementApplicationDataResponse | None = None
 
+    expense_items: list[ExpenseItemResponse] = []
     attachments: list[AttachmentResponse] = []
 
     workflow_actions: list[
@@ -198,6 +214,14 @@ class ReimbursementApplicationDetailResponse(
     model_config = ConfigDict(
         from_attributes=True,
     )
+class ReimbursementApplicationUpdate(BaseModel):
+    requested_amount: float | None = None
+    claim_date: date | None = None
+    remarks: str | None = None
+    expense_items: list[ExpenseItemCreate] = []
+    attachment_ids: list[str] = []
+    existing_attachment_paths: list[dict] = []
+
 class ApprovalActionRequest(BaseModel):
 
     remarks: str | None = None
@@ -219,10 +243,11 @@ class PendingApprovalResponse(BaseModel):
     application_no: str
 
     employee_id: str
-
+    employee_name: str | None = None
     requested_amount: float
-
+    
     status: str
+    created_at: datetime | None = None
 
     model_config = ConfigDict(
         from_attributes=True,
