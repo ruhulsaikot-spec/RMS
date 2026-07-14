@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { expenseTypeService }
 from "@/services/expense-type.service";
@@ -11,7 +12,36 @@ type ClaimDetailsStepProps = {
   claimType: string;
   formData: any;
   setFormData: any;
+  onValidate?: (isValid: boolean) => void;
 };
+
+export function validateClaimDetails(formData: any): boolean {
+  if (!formData.claimDate) {
+    toast.error("Claim Application Date is required.");
+    return false;
+  }
+  for (let i = 0; i < formData.expenseItems.length; i++) {
+    const item = formData.expenseItems[i];
+    const row = i + 1;
+    if (!item.expenseDate) {
+      toast.error(`Row ${row}: Expense Date is required.`);
+      return false;
+    }
+    if (!item.claimType) {
+      toast.error(`Row ${row}: Claim Type is required.`);
+      return false;
+    }
+    if (!item.purpose) {
+      toast.error(`Row ${row}: Purpose is required.`);
+      return false;
+    }
+    if (!item.amount || Number(item.amount) <= 0) {
+      toast.error(`Row ${row}: Amount is required.`);
+      return false;
+    }
+  }
+  return true;
+}
 
 export default function ClaimDetailsStep({
   formData,
@@ -29,6 +59,13 @@ export default function ClaimDetailsStep({
     useEffect(() => {
 
       loadMasterData();
+
+      if (!formData.claimDate) {
+        setFormData({
+          ...formData,
+          claimDate: new Date().toISOString().split("T")[0],
+        });
+      }
 
     }, []);
 
@@ -144,12 +181,7 @@ export default function ClaimDetailsStep({
           <input
             type="date"
             value={formData.claimDate}
-            onChange={(e) =>
-              setFormData({
-                ...formData,
-                claimDate: e.target.value,
-              })
-            }
+            readOnly
             className="
             mt-1
             w-full
@@ -159,6 +191,8 @@ export default function ClaimDetailsStep({
             bg-white/5
             px-3
             py-2
+            cursor-not-allowed
+            opacity-70
             "
           />
         </div>
@@ -176,6 +210,18 @@ export default function ClaimDetailsStep({
                 remarks: e.target.value,
               })
             }
+            className="
+            mt-1
+            w-full
+            rounded-xl
+            border
+            border-white/10
+            bg-white/5
+            px-3
+            py-2
+            text-sm
+            text-white
+            "
           />
         </div>
 
@@ -286,7 +332,7 @@ export default function ClaimDetailsStep({
                         }
                         className="w-full rounded-lg bg-white/5 px-2 py-2"
                       >
-                        <option value="">
+                        <option value="" className="bg-[#17386E] text-white">
                           Select Expense Type
                         </option>
 
@@ -295,6 +341,7 @@ export default function ClaimDetailsStep({
                             <option
                               key={expenseType.id}
                               value={expenseType.id}
+                              className="bg-[#17386E] text-white"
                             >
                               {expenseType.name}
                             </option>
@@ -343,7 +390,7 @@ export default function ClaimDetailsStep({
                         }
                         className="w-full rounded-lg bg-white/5 px-2 py-2"
                       >
-                        <option value="">
+                        <option value="" className="bg-[#17386E] text-white">
                           Select Project
                         </option>
 
@@ -352,6 +399,7 @@ export default function ClaimDetailsStep({
                             <option
                               key={project.id}
                               value={project.id}
+                              className="bg-[#17386E] text-white"
                             >
                               {project.code} - {project.name}
                             </option>

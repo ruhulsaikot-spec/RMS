@@ -44,6 +44,28 @@ export const reimbursementService = {
     return response.data;
   },
 
+  async deleteApplication(
+    applicationId: string
+  ) {
+    const response =
+      await apiClient.delete(
+        `/reimbursements/${applicationId}`
+      );
+    return response.data;
+  },
+
+  async updateApplication(
+    applicationId: string,
+    payload: any
+  ) {
+    const response =
+      await apiClient.put(
+        `/reimbursements/${applicationId}`,
+        payload
+      );
+    return response.data;
+  },
+
   async getPendingApprovals() {
     const response =
       await apiClient.get(

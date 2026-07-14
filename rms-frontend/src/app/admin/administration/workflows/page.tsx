@@ -360,10 +360,6 @@ const [workflowForm, setWorkflowForm] =
                       <tr className="border-b border-white/10">
 
                         <th className="p-3 text-left text-xs">
-                          Code
-                        </th>
-
-                        <th className="p-3 text-left text-xs">
                           Workflow Name
                         </th>
 
@@ -440,9 +436,6 @@ const [workflowForm, setWorkflowForm] =
                             key={workflow.id}
                             className="border-b border-white/5"
                             >
-                            <td className="p-3 text-xs">
-                                {workflow.workflowCode}
-                            </td>
 
                             <td className="p-3 text-xs">
                                 {workflow.workflowName}
@@ -541,48 +534,45 @@ const [workflowForm, setWorkflowForm] =
                                 "
                               >
                                 Edit
+                              </button>                             
+
+                            <button
+                                onClick={() => {
+                                  toast("Delete this workflow?", {
+                                    style: { background: "#7f1d1d", border: "1px solid rgba(239,68,68,0.6)", color: "white" },
+                                    actionButtonStyle: { background: "#ef4444", color: "white" },
+                                    cancelButtonStyle: { background: "rgba(255,255,255,0.15)", color: "white" },
+                                    action: {
+                                      label: "Confirm Delete",
+                                      onClick: async () => {
+                                        try {
+                                          await workflowService.deleteWorkflow(workflow.id);
+                                          toast.success("Workflow deleted.");
+                                          loadWorkflows();
+                                        } catch (error: any) {
+                                          toast.error(error?.response?.data?.detail || "Failed to delete.");
+                                        }
+                                      },
+                                    },
+                                    cancel: {
+                                      label: "Cancel",
+                                      onClick: () => {},
+                                    },
+                                  });
+                                }}
+                                className="
+                                rounded-lg
+                                border
+                                border-red-500/20
+                                bg-red-500/10
+                                px-2
+                                py-1
+                                text-[11px]
+                                text-red-300
+                                "
+                              >
+                                Delete
                               </button>
-
-                              {workflow.status === "Active" ? (
-
-                                <button
-                                  onClick={() =>
-                                    router.push(
-                                      `/admin/administration/workflows/edit/${workflow.id}`
-                                    )
-                                  }
-                                  className="
-                                  rounded-lg
-                                  border
-                                  border-red-500/20
-                                  bg-red-500/10
-                                  px-2
-                                  py-1
-                                  text-[11px]
-                                  text-red-300
-                                  "
-                                >
-                                  Deactivate
-                                </button>
-
-                              ) : (
-
-                                <button
-                                  className="
-                                  rounded-lg
-                                  border
-                                  border-green-500/20
-                                  bg-green-500/10
-                                  px-2
-                                  py-1
-                                  text-[11px]
-                                  text-green-300
-                                  "
-                                >
-                                  Activate
-                                </button>
-
-                              )}
 
                             </div>
 

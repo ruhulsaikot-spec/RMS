@@ -618,9 +618,29 @@ useEffect(() => {
                               </button>
 
                               <button
-                                onClick={() =>
-                                  setDeleteGroupId(group.id)
-                                }
+                                onClick={() => {
+                                  toast("Delete this approval group?", {
+                                    style: { background: "#7f1d1d", border: "1px solid rgba(239,68,68,0.6)", color: "white" },
+                                    actionButtonStyle: { background: "#ef4444", color: "white" },
+                                    cancelButtonStyle: { background: "rgba(255,255,255,0.15)", color: "white" },
+                                    action: {
+                                      label: "Confirm Delete",
+                                      onClick: async () => {
+                                        try {
+                                          await approvalGroupService.deleteApprovalGroup(group.id);
+                                          toast.success("Approval group deleted.");
+                                          loadApprovalGroups();
+                                        } catch (error: any) {
+                                          toast.error(error?.response?.data?.detail || "Failed to delete.");
+                                        }
+                                      },
+                                    },
+                                    cancel: {
+                                      label: "Cancel",
+                                      onClick: () => {},
+                                    },
+                                  });
+                                }}
                                 className="
                               rounded-lg
                               border

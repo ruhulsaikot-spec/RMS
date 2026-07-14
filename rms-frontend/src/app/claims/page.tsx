@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { reimbursementService } from "@/services/reimbursement.service";
+import { expenseTypeService } from "@/services/expense-type.service";
+import PermissionGuard from "@/components/auth/permission-guard";
+import { toast } from "sonner";
 import {
   Search,
   Plus,
@@ -49,21 +52,27 @@ const claims = [
 ];
 
 function getStatusClass(status: string) {
-  switch (status) {
-    case "Approved":
+  switch (status?.toUpperCase()) {
+    case "APPROVED":
       return "bg-green-500/15 text-green-300 border border-green-400/30 shadow-lg shadow-green-500/10";
 
-    case "Rejected":
+    case "REJECTED":
       return "bg-red-500/15 text-red-300 border border-red-400/30 shadow-lg shadow-red-500/10";
 
-    case "Finance Review":
+    case "IN_APPROVAL":
       return "bg-purple-500/20 text-purple-200 border border-purple-400/30 shadow-lg shadow-purple-500/10";
 
-    case "Submitted":
+    case "SUBMITTED":
       return "bg-cyan-500/20 text-cyan-200 border border-cyan-400/30 shadow-lg shadow-cyan-500/10";
 
-    case "Paid":
+    case "PAID":
       return "bg-yellow-500/20 text-yellow-200 border border-yellow-400/30 shadow-lg shadow-yellow-500/10";
+
+    case "DRAFT":
+      return "bg-white/10 text-white/70 border border-white/20";
+
+    case "VERIFIED":
+      return "bg-blue-500/20 text-blue-200 border border-blue-400/30 shadow-lg shadow-blue-500/10";
 
     default:
       return "bg-white/10 text-white border border-white/20";
@@ -71,12 +80,23 @@ function getStatusClass(status: string) {
 }
 
 export default function ClaimsPage() {
-  const [claims, setClaims] = useState<any[]>([]);
+const [claims, setClaims] = useState<any[]>([]);
 const [loading, setLoading] = useState(true);
+const [expenseTypes, setExpenseTypes] = useState<any[]>([]);
 
 useEffect(() => {
   loadClaims();
+  loadExpenseTypes();
 }, []);
+
+const loadExpenseTypes = async () => {
+  try {
+    const data = await expenseTypeService.getExpenseTypes();
+    setExpenseTypes(data || []);
+  } catch (error) {
+    console.error(error);
+  }
+};
 
 const loadClaims = async () => {
   try {
@@ -90,10 +110,7 @@ const loadClaims = async () => {
         applicationNo:
           item.application_no,
 
-        type:
-          item.claim_type_name ||
-          item.reimbursement_type_id ||
-          "-",
+        type: item.claim_types || [],
 
         employee:
           item.employee_name,
@@ -107,12 +124,24 @@ const loadClaims = async () => {
         amount:
           item.requested_amount,
 
-        status:
-          item.status,
+        status: item.status,
+        statusLabel: item.status
+          ? item.status.charAt(0).toUpperCase() +
+            item.status.slice(1).toLowerCase().replace(/_/g, " ")
+          : "-",
 
-        date: "-",
+        date: item.created_at
+          ? new Date(item.created_at).toLocaleDateString("en-GB", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            })
+          : "-",
+
+        createdAt: item.created_at || "",
     }));
 
+    console.log("MAPPED CLAIMS =>", mappedClaims);
     setClaims(
       mappedClaims
     );
@@ -128,7 +157,14 @@ const loadClaims = async () => {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
-  const filteredClaims = claims.filter((c: any) => {
+  const recordsPerPage = 10;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const sortedClaims = [...claims].sort((a, b) =>
+    (b.createdAt || "").localeCompare(a.createdAt || "")
+  );
+
+  const filteredClaims = sortedClaims.filter((c: any) => {
     const matchesSearch =
   (c.applicationNo || "")
     .toLowerCase()
@@ -137,13 +173,14 @@ const loadClaims = async () => {
   (c.employee || "")
     .toLowerCase()
     .includes(search.toLowerCase());
-    const matchesStatus = statusFilter === "All" || c.status === statusFilter;
+    const matchesStatus = statusFilter === "All" || c.status?.toUpperCase() === statusFilter;
     const matchesFrom = fromDate ? c.date >= fromDate : true;
     const matchesTo = toDate ? c.date <= toDate : true;
     return matchesSearch && matchesStatus && matchesFrom && matchesTo;
   });
 
   return (
+    <PermissionGuard permission="reimbursement:read">
     <main className="relative flex min-h-screen overflow-hidden bg-gradient-to-b from-[#030B1F] to-[#06153C] text-white">
       {/* Background Glow */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(59,130,246,0.35),transparent_30%),radial-gradient(circle_at_85%_15%,rgba(34,211,238,0.20),transparent_25%),radial-gradient(circle_at_80%_80%,rgba(99,102,241,0.25),transparent_30%),radial-gradient(circle_at_50%_50%,rgba(37,99,235,0.12),transparent_50%)]" />
@@ -196,19 +233,19 @@ const loadClaims = async () => {
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="
-                h-9
-                min-w-[140px]
-                rounded-xl
-                border
-                border-white/10
-                bg-[#35538F]
-                px-3
-                text-xs
-                text-white
-                appearance-none
-                "
+                  h-9
+                  min-w-[140px]
+                  rounded-xl
+                  border
+                  border-white/10
+                  bg-white/10
+                  px-3
+                  text-xs
+                  text-white
+                  appearance-none
+                  "
               >
-                {["All", "Submitted", "Finance Review", "Approved", "Rejected", "Paid"].map((s) => (
+                {["All", "Draft", "Submitted", "In_Approval", "Approved", "Rejected", "Verified", "Paid"].map((s) => (
                   <option
                     key={s}
                     value={s}
@@ -350,17 +387,17 @@ const loadClaims = async () => {
              <table className="w-full text-left">
               <thead className="border-b border-white/20">
                 <tr>
-                  <th className="px-3 py-2 text-[11px] text-white font-semibold uppercase">Application No</th>
-                  <th className="px-3 py-2 text-[11px] text-white font-semibold uppercase">Type</th>
-                  <th className="px-3 py-2 text-[11px] text-white font-semibold uppercase">Employee</th>
-                  <th className="px-3 py-2 text-[11px] text-white font-semibold uppercase">Amount</th>
-                  <th className="px-3 py-2 text-[11px] text-white font-semibold uppercase">Status</th>
-                  <th className="px-3 py-2 text-[11px] text-white font-semibold uppercase">Submitted Date</th>
-                  <th className="px-6 py-3 text-xs text-white font-semibold tracking-wide uppercase text-right">Action</th>
+                  <th className="px-3 py-2 text-[11px] text-white font-semibold">Application No</th>
+                  <th className="px-3 py-2 text-[11px] text-white font-semibold">Type</th>
+                  <th className="px-3 py-2 text-[11px] text-white font-semibold">Employee</th>
+                  <th className="px-3 py-2 text-[11px] text-white font-semibold">Amount</th>
+                  <th className="px-3 py-2 text-[11px] text-white font-semibold">Status</th>
+                  <th className="px-3 py-2 text-[11px] text-white font-semibold">Submitted Date</th>
+                  <th className="px-6 py-3 text-xs text-white font-semibold tracking-wide text-right">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredClaims.map((c) => (
+                {filteredClaims.slice((currentPage - 1) * recordsPerPage, currentPage * recordsPerPage).map((c) => (
                   <tr
                     key={c.id}
                     className="
@@ -376,7 +413,11 @@ const loadClaims = async () => {
                     {c.applicationNo}
                   </td>
                     <td className="px-3 py-2 text-xs">
-                      {c.type}
+                      {Array.isArray(c.type)
+                        ? c.type.map((id: string) =>
+                            expenseTypes.find((e: any) => e.id === id)?.name || id
+                          ).join(", ")
+                        : "-"}
                     </td>
                     <td className="px-3 py-2 text-xs">
                       <div className="text-xs font-medium text-white">
@@ -405,11 +446,11 @@ const loadClaims = async () => {
                         `}
                       >
                         <span className="h-1.5 w-1.5 rounded-full bg-current"></span>
-                        {c.status}
+                        {c.statusLabel || c.status}
                       </span>
                     </td>
                     <td className="px-3 py-2 text-xs text-white/80">
-                      -
+                      {c.date}
                     </td>
                     <td className="px-3 py-2 text-right">
 
@@ -431,23 +472,55 @@ const loadClaims = async () => {
                         </button>
                       </Link>
 
-                      <Link href={`/claims/${c.id}?mode=edit`}>
-                        <button
-                          className="
-                          rounded-xl
-                          border
-                          border-yellow-400/20
-                          bg-yellow-500/10
-                          px-3
-                          py-1.5
-                          text-xs
-                          "
-                        >
-                          Edit
-                        </button>
-                      </Link>
+                      <button
+                        onClick={() => {
+                          if (c.status !== "DRAFT") {
+                            toast.error("Only DRAFT applications can be edited.");
+                            return;
+                          }
+                          window.location.href = `/claims/${c.id}/edit`;
+                        }}
+                        className="
+                        rounded-xl
+                        border
+                        border-yellow-400/20
+                        bg-yellow-500/10
+                        px-3
+                        py-1.5
+                        text-xs
+                        "
+                      >
+                        Edit
+                      </button>
 
                       <button
+                        onClick={() => {
+                          if (c.status !== "DRAFT") {
+                            toast.error("Only DRAFT applications can be deleted.");
+                            return;
+                          }
+                          toast("Delete this application?", {
+                            style: { background: "#7f1d1d", border: "1px solid rgba(239,68,68,0.6)", color: "white" },
+                            actionButtonStyle: { background: "#ef4444", color: "white" },
+                            cancelButtonStyle: { background: "rgba(255,255,255,0.15)", color: "white" },
+                            action: {
+                              label: "Confirm Delete",
+                              onClick: async () => {
+                                try {
+                                  await reimbursementService.deleteApplication(c.id);
+                                  toast.success("Application deleted.");
+                                  loadClaims();
+                                } catch (error: any) {
+                                  toast.error(error?.response?.data?.detail || "Failed to delete.");
+                                }
+                              },
+                            },
+                            cancel: {
+                              label: "Cancel",
+                              onClick: () => {},
+                            },
+                          });
+                        }}
                         className="
                         rounded-xl
                         border
@@ -472,56 +545,37 @@ const loadClaims = async () => {
 
             {/* Pagination */}
             <div className="flex items-center justify-between mt-3">
-              <p className="text-xs text-blue-100/60">Showing 1–3 of {filteredClaims.length} claims</p>
+              <p className="text-xs text-blue-100/60">
+                Showing {Math.min((currentPage - 1) * recordsPerPage + 1, filteredClaims.length)}–{Math.min(currentPage * recordsPerPage, filteredClaims.length)} of {filteredClaims.length} claims
+              </p>
               <div className="flex gap-1">
-                <button className="
-                  h-8
-                  px-3
-                  rounded-lg
-                  border
-                  border-white/10
-                  bg-white/5
-                  text-xs
-                  text-blue-100/70
-                  hover:bg-white/10">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="h-8 px-3 rounded-lg border border-white/10 bg-white/5 text-xs text-blue-100/70 hover:bg-white/10 disabled:opacity-30"
+                >
                   Previous
                 </button>
 
-                <button className="
-                  h-8
-                  px-3
-                  rounded-lg
-                  bg-cyan-500
-                  text-xs
-                  font-medium
-                  text-black">
-                  1
-                </button>
+                {Array.from({ length: Math.ceil(filteredClaims.length / recordsPerPage) }, (_, i) => i + 1).map((page) => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`h-8 px-3 rounded-lg text-xs font-medium ${
+                      currentPage === page
+                        ? "bg-cyan-500 text-black"
+                        : "border border-white/10 bg-white/5 text-blue-100/70 hover:bg-white/10"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
 
-                <button className="
-                  h-8
-                  px-3
-                  rounded-lg
-                  border
-                  border-white/10
-                  bg-white/5
-                  text-xs
-                  text-blue-100/70
-                  hover:bg-white/10
-                  ">
-                  2
-                </button>
-
-                <button className="
-                  h-8
-                  px-3
-                  rounded-lg
-                  border
-                  border-white/10
-                  bg-white/5
-                  text-xs
-                  text-blue-100/70
-                  hover:bg-white/10">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.min(p + 1, Math.ceil(filteredClaims.length / recordsPerPage)))}
+                  disabled={currentPage === Math.ceil(filteredClaims.length / recordsPerPage)}
+                  className="h-8 px-3 rounded-lg border border-white/10 bg-white/5 text-xs text-blue-100/70 hover:bg-white/10 disabled:opacity-30"
+                >
                   Next
                 </button>
               </div>
@@ -532,5 +586,6 @@ const loadClaims = async () => {
        </section>
     </div>
   </main>
+  </PermissionGuard>
 );
 }

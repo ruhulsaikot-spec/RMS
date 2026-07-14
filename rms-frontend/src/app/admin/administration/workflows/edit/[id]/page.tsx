@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -11,6 +11,9 @@ import PermissionGuard from "@/components/auth/permission-guard";
 import { workflowService } from "@/services/workflow.service";
 import { expenseTypeService } from "@/services/expense-type.service";
 import { approvalGroupService } from "@/services/approval-group.service";
+import { companyService } from "@/services/company.service";
+import { employeeService } from "@/services/employee.service";
+import { userService } from "@/services/user.service";
 
 export default function EditWorkflowPage() {
 
@@ -24,39 +27,45 @@ export default function EditWorkflowPage() {
     useState(1);
 
   const [workflowName, setWorkflowName] =
-  useState(
-    "Local Travel Reimbursement"
-  );
+  useState("");
 
   const [company, setCompany] =
-  useState(
-    "Wyze Solutions Ltd"
-  );
+  useState("");
+
+  const [companyName, setCompanyName] =
+  useState("");
 
   const [status, setStatus] =
-    useState("Active");
+    useState("Draft");
 
   const [description, setDescription] =
-  useState(
-    "Local travel reimbursement workflow."
-  );
+    useState("");
 
   const [selectedExpenseTypeIds, setSelectedExpenseTypeIds] =
   useState<string[]>([]);
 
   const [isDefaultWorkflow, setIsDefaultWorkflow] =
-  useState(true);
+    useState(false);
 
   const [amountFrom, setAmountFrom] =
-  useState("1000");
+    useState("");
 
   const [amountTo, setAmountTo] =
-  useState("50000");
+    useState("");
 
   const [expenseTypeList, setExpenseTypeList] =
   useState<any[]>([]);
 
+  const [companies, setCompanies] =
+  useState<any[]>([]);
+
 const [approvalGroups, setApprovalGroups] =
+  useState<any[]>([]);
+
+const [employees, setEmployees] =
+  useState<any[]>([]);
+
+const [users, setUsers] =
   useState<any[]>([]);
 
 const [approvalGroupDetails, setApprovalGroupDetails] =
@@ -64,14 +73,24 @@ const [approvalGroupDetails, setApprovalGroupDetails] =
     Record<
       string,
       {
-        approver: string;
-        designation: string;
+        approvers: string[];
+        designations: string[];
       }
     >
   >({});
 
 const [showPublishConfirm, setShowPublishConfirm] =
   useState(false);
+
+const [expandedSections, setExpandedSections] = useState<
+  Record<
+    string,
+    {
+      rules: boolean;
+      notifications: boolean;
+    }
+  >
+>({});
 
 const loadApprovalGroups = async () => {
 
@@ -88,11 +107,15 @@ const loadApprovalGroups = async () => {
 
       details[group.group_name] = {
 
-        approver:
-          group.members?.[0]?.employee_name ?? "-",
+        approvers:
+          group.members?.map(
+            (m: any) => m.employee_name
+          ) ?? [],
 
-        designation:
-          group.members?.[0]?.designation_name ?? "-",
+        designations:
+          group.members?.map(
+            (m: any) => m.designation_name
+          ) ?? [],
 
       };
 
@@ -107,6 +130,31 @@ const loadApprovalGroups = async () => {
     console.error(error);
 
     toast.error("Failed to load approval groups.");
+
+    return [];
+
+  }
+
+};
+
+const loadCompanies = async () => {
+
+  try {
+
+    const data =
+      await companyService.getCompanies();
+
+    setCompanies(data);
+
+    return data;
+
+  } catch (error) {
+
+    console.error(error);
+
+    toast.error(
+      "Failed to load companies."
+    );
 
     return [];
 
@@ -130,6 +178,26 @@ const loadExpenseTypes = async () => {
   }
 };
 
+const loadEmployees = async () => {
+  try {
+    const data = await employeeService.getEmployees();
+    const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+    setEmployees(list);
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+const loadUsers = async () => {
+  try {
+    const response = await userService.getUsers();
+    const list = response?.data || response || [];
+    setUsers(list);
+  } catch (error) {
+    console.error(error);
+  }
+};
+
 const loadWorkflow = async () => {
   try {
     const workflow =
@@ -144,6 +212,14 @@ console.log(workflow);
 
 setWorkflowName(
   workflow.workflowName ?? ""
+);
+
+setCompany(
+  workflow.companyId ?? ""
+);
+
+setCompanyName(
+  workflow.companyName ?? ""
 );
 
 setStatus(
@@ -191,6 +267,17 @@ setStages(
       approverType:
         stage.approver_type ?? "GROUP",
 
+      userId:
+        stage.user_id ?? "",
+
+      roleId:
+        stage.role_id ?? "",
+
+      userSearch: "",
+
+      minApproverCount:
+        String(stage.min_approver_count ?? 1),
+
       actionType:
           stage.action_type ||
           (
@@ -202,24 +289,80 @@ setStages(
           ),
 
       mandatory:
-        stage.min_approver_count > 0,
+        (stage.min_approver_count ?? 0) > 0,
 
-      emailNotification: true,
+      emailNotification:
+          stage.email_notification ?? true,
 
-      inAppNotification: true,
+      inAppNotification:
+        stage.in_app_notification ?? true,
 
-      slaEnabled: false,
+      slaEnabled:
+        stage.sla_enabled ?? false,
 
-      slaHours: "",
+      slaHours:
+        stage.sla_hours != null
+          ? String(stage.sla_hours)
+          : "",
 
-      escalationEnabled: false,
+      escalationEnabled:
+        stage.escalation_enabled ?? false,
 
-      escalationHours: "",
+      escalationHours:
+        stage.escalation_hours != null
+          ? String(stage.escalation_hours)
+          : "",
 
-      escalationGroup: "",
+      escalationGroup:
+        stage.escalation_group ?? "",
+
+      allowedActions:
+        stage.allowed_actions ?? [
+          "APPROVE",
+          "BACK_TO_PREVIOUS_STAGE",
+          "RETURN_TO_APPLICANT",
+        ],
+
+      remarksRequired:
+        stage.remarks_required ?? {
+          APPROVE: false,
+          BACK_TO_PREVIOUS_STAGE: true,
+          RETURN_TO_APPLICANT: true,
+          FINAL_REJECT: true,
+        },
+
+      applicantNotification:
+        stage.applicant_notification ?? {
+          approval: true,
+          returnToApplicant: true,
+          finalReject: true,
+          workflowCompleted: true,
+        },
+
+      approverNotification: {
+        taskAssigned: stage.in_app_notification ?? true,
+        slaReminder: stage.sla_enabled ?? false,
+        escalationTriggered: stage.escalation_enabled ?? false,
+      },
+
+
     })
   )
 );
+
+setExpandedSections(
+  Object.fromEntries(
+    (workflow.stages ?? []).map((stage: any) => [
+      stage.id,
+      {
+        rules: false,
+        notifications: false,
+      },
+    ])
+  )
+);
+
+
   } catch (error) {
     console.error(error);
     toast.error("Failed to load workflow.");
@@ -234,7 +377,13 @@ useEffect(() => {
 
     await loadApprovalGroups();
 
+    await loadCompanies();
+
     await loadExpenseTypes();
+
+    await loadEmployees();
+
+    await loadUsers();
 
     await loadWorkflow();
 
@@ -242,9 +391,51 @@ useEffect(() => {
 
   load();
 
-}, [id]);
+},[id]);
+
+const toggleSection = (
+  stageId: string,
+  section: "rules" | "notifications"
+) => {
+  setExpandedSections((prev) => ({
+    ...prev,
+    [stageId]: {
+      rules:
+        section === "rules"
+          ? !prev[stageId]?.rules
+          : prev[stageId]?.rules ?? false,
+
+      notifications:
+        section === "notifications"
+          ? !prev[stageId]?.notifications
+          : prev[stageId]?.notifications ?? false,
+    },
+  }));
+};
 
   type WorkflowStage = {
+  
+  allowedActions: string[];
+
+remarksRequired: {
+  APPROVE: boolean;
+  BACK_TO_PREVIOUS_STAGE: boolean;
+  RETURN_TO_APPLICANT: boolean;
+  FINAL_REJECT: boolean;
+};
+
+applicantNotification: {
+  approval: boolean;
+  returnToApplicant: boolean;
+  finalReject: boolean;
+  workflowCompleted: boolean;
+};
+
+approverNotification: {
+  taskAssigned: boolean;
+  slaReminder: boolean;
+  escalationTriggered: boolean;
+};
   id: string;
   stepOrder?: number;
 
@@ -254,6 +445,10 @@ useEffect(() => {
   approvalGroupId: string;
 
   approverType: string;
+  userId: string;
+  roleId: string;
+  userSearch: string;
+  minApproverCount: string;
   actionType: string;
 
   mandatory: boolean;
@@ -271,6 +466,10 @@ useEffect(() => {
   
 const [stages, setStages] =
 useState<WorkflowStage[]>([]);
+
+useEffect(() => {
+  console.log("STAGES =", stages);
+}, [stages]);
 
   return (
     <PermissionGuard
@@ -647,7 +846,11 @@ useState<WorkflowStage[]>([]);
                         </label>
 
                         <select
-                          value={company}
+                          value={
+                              companies.find(
+                                (item: any) => item.id === company
+                              )?.name ?? "-"
+                            }
                           onChange={(e) =>
                             setCompany(
                               e.target.value
@@ -666,12 +869,17 @@ useState<WorkflowStage[]>([]);
                           "
                         >
 
-                          <option
-                            value="WyzeTech Ltd"
-                            className="bg-[#17386E]"
-                          >
-                            WyzeTech Ltd
-                          </option>
+                          {companies.map((companyItem: any) => (
+
+                            <option
+                              key={companyItem.id}
+                              value={companyItem.id}
+                              className="bg-[#17386E]"
+                            >
+                              {companyItem.name}
+                            </option>
+
+                          ))}
 
                         </select>
 
@@ -958,157 +1166,207 @@ useState<WorkflowStage[]>([]);
 
                             </div>
 
-                            <div className="grid gap-4 md:grid-cols-3">
+                            <div className="grid gap-4 md:grid-cols-5">
 
                               <div>
-
                                 <label className="mb-2 block text-xs font-medium text-white/80">
                                   Stage Name
                                 </label>
-
                                 <input
                                   type="text"
                                   value={stage.stageName}
                                   onChange={(e) =>
                                     setStages(
                                       stages.map((s) =>
-                                        s.id === stage.id
-                                          ? {
-                                              ...s,
-                                              stageName:
-                                                e.target.value,
-                                            }
-                                          : s
+                                        s.id === stage.id ? { ...s, stageName: e.target.value } : s
                                       )
                                     )
                                   }
-                                  className="
-                                  h-10
-                                  w-full
-                                  rounded-xl
-                                  border
-                                  border-white/10
-                                  bg-white/10
-                                  px-3
-                                  text-xs
-                                  text-white
-                                  "
+                                  className="h-10 w-full rounded-xl border border-white/10 bg-white/10 px-3 text-xs text-white"
                                 />
-
                               </div>
 
                               <div>
-
                                 <label className="mb-2 block text-xs font-medium text-white/80">
-                                  Approval Group
+                                  Approver Type
                                 </label>
-
                                 <select
-                                  value={
-                                    stage.approvalGroupId
-                                  }
+                                  value={stage.approverType}
                                   onChange={(e) =>
                                     setStages(
                                       stages.map((s) =>
                                         s.id === stage.id
-                                          ? {
-                                              ...s,
-                                              approvalGroupId:
-                                                e.target.value,
-                                              approvalGroup:
-                                                approvalGroups.find(
-                                                  (g: any) =>
-                                                    g.id === e.target.value
-                                                )?.group_name ?? "",
-                                            }
+                                          ? { ...s, approverType: e.target.value, approvalGroup: "", approvalGroupId: "", userId: "", roleId: "" }
                                           : s
                                       )
                                     )
                                   }
-                                  className="
-                                  h-10
-                                  w-full
-                                  rounded-xl
-                                  border
-                                  border-white/10
-                                  bg-white/10
-                                  px-3
-                                  text-xs
-                                  text-white
-                                  "
+                                  className="h-10 w-full rounded-xl border border-white/10 bg-white/10 px-3 text-xs text-white"
                                 >
+                                  <option value="GROUP" className="bg-[#17386E]">Approval Group</option>
+                                  <option value="LINE_MANAGER" className="bg-[#17386E]">Line Manager</option>
+                                  <option value="USER" className="bg-[#17386E]">Specific User</option>
+                                  <option value="ROLE" className="bg-[#17386E]">Role</option>
+                                </select>
+                              </div>
 
-                                  <option
-                                    value=""
-                                    className="bg-[#17386E]"
-                                  >
-                                    Select Group
-                                  </option>
+                              {stage.approverType === "ROLE" && (
+                              <div>
+                                <label className="mb-2 block text-xs font-medium text-white/80">Select Role</label>
+                                <select
+                                  value={stage.roleId}
+                                  onChange={(e) =>
+                                    setStages(stages.map((s) => s.id === stage.id ? { ...s, roleId: e.target.value } : s))
+                                  }
+                                  className="h-10 w-full rounded-xl border border-white/10 bg-white/10 px-3 text-xs text-white"
+                                >
+                                  <option value="" className="bg-[#17386E]">Select Role</option>
+                                  <option value="approver" className="bg-[#17386E]">Approver</option>
+                                  <option value="finance" className="bg-[#17386E]">Finance</option>
+                                  <option value="admin" className="bg-[#17386E]">Admin</option>
+                                </select>
+                              </div>
+                              )}
 
-                                  {approvalGroups.map(
-                                    (group: any) => (
-                                      <option
-                                        key={group.id}
-                                        value={group.id}
-                                        className="bg-[#17386E]"
-                                      >
-                                        {group.group_name}
-                                      </option>
+                              {stage.approverType === "GROUP" && (
+                              <div>
+                                <label className="mb-2 block text-xs font-medium text-white/80">Approval Group</label>
+                                <select
+                                  value={stage.approvalGroupId}
+                                  onChange={(e) =>
+                                    setStages(
+                                      stages.map((s) =>
+                                        s.id === stage.id
+                                          ? { ...s, approvalGroupId: e.target.value, approvalGroup: approvalGroups.find((g: any) => g.id === e.target.value)?.group_name ?? "" }
+                                          : s
+                                      )
                                     )
-                                  )}
+                                  }
+                                  className="h-10 w-full rounded-xl border border-white/10 bg-white/10 px-3 text-xs text-white"
+                                >
+                                  <option value="" className="bg-[#17386E]">Select Group</option>
+                                  {approvalGroups.map((group: any) => (
+                                    <option key={group.id} value={group.id} className="bg-[#17386E]">{group.group_name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              )}
 
-                                  </select>
+                              {stage.approverType === "LINE_MANAGER" && (
+                              <div>
+                                <label className="mb-2 block text-xs font-medium text-white/80">Approver</label>
+                                <div className="h-10 rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 flex items-center text-xs text-cyan-300">
+                                  Auto — Employee&apos;s Line Manager
+                                </div>
+                              </div>
+                              )}
 
-                                    </div>
-
-                                    <div>
-
-                                      <label className="mb-2 block text-xs font-medium text-white/80">
-                                        Primary Approver
-                                      </label>
-
-                                      <div
-                                        className="
-                                        h-10
-                                        rounded-xl
-                                        border
-                                        border-cyan-500/20
-                                        bg-cyan-500/10
-                                        px-3
-                                        flex
-                                        items-center
-                                        text-xs
-                                        text-cyan-300
-                                        "
-                                      >
-
-                                        {
-                                          stage.approvalGroup
-                                            ? approvalGroupDetails[
-                                                stage.approvalGroup as keyof typeof approvalGroupDetails
-                                              ]?.approver
-                                            : "Select approval group"
-                                        }
-
-                                      </div>
-
-                                      {stage.approvalGroup && (
-
-                                        <p className="mt-1 text-[11px] text-white/60">
-
-                                          {
-                                            approvalGroupDetails[
-                                              stage.approvalGroup
-                                            ]?.designation ?? "-"
+                              {stage.approverType === "USER" && (
+                              <div>
+                                <label className="mb-2 block text-xs font-medium text-white/80">Select User</label>
+                                <input
+                                  type="text"
+                                  placeholder="Search by name or ID..."
+                                  value={stage.userSearch ?? ""}
+                                  onChange={(e) =>
+                                    setStages(stages.map((s) => s.id === stage.id ? { ...s, userSearch: e.target.value } : s))
+                                  }
+                                  className="mb-1 h-10 w-full rounded-xl border border-white/10 bg-white/10 px-3 text-xs text-white placeholder:text-white/40"
+                                />
+                                <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
+                                  <div className="max-h-40 overflow-y-auto">
+                                    {users
+                                      .filter((u: any) => {
+                                        if (stage.userId && !stage.userSearch) return false;
+                                        return !stage.userSearch ||
+                                          u.full_name?.toLowerCase().includes((stage.userSearch ?? "").toLowerCase()) ||
+                                          u.employee_id?.toLowerCase().includes((stage.userSearch ?? "").toLowerCase());
+                                      })
+                                      .map((u: any) => (
+                                        <div
+                                          key={u.id}
+                                          onClick={() =>
+                                            setStages(stages.map((s) =>
+                                              s.id === stage.id ? { ...s, userId: u.id, userSearch: "" } : s
+                                            ))
                                           }
-
-                                        </p>
-
-                                      )}
-
+                                          className={`flex cursor-pointer items-center justify-between px-3 py-2 text-xs hover:bg-cyan-500/10 transition-colors ${stage.userId === u.id ? "bg-cyan-500/15 text-cyan-300" : "text-white"}`}
+                                        >
+                                          <span>{u.full_name}</span>
+                                          <span className="text-white/40">{u.employee_id}</span>
+                                        </div>
+                                      ))}
+                                  </div>
+                                  {stage.userId && (
+                                    <div className="border-t border-white/10 px-3 py-2 text-xs text-cyan-300">
+                                      Selected: {users.find((u: any) => u.id === stage.userId)?.full_name}
                                     </div>
+                                  )}
+                                </div>
+                              </div>
+                              )}
 
+                              <div>
+                                <label className="mb-2 block text-xs font-medium text-white/80">Selected Approver</label>
+                                <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-300 min-h-[40px]">
+                                  {stage.approverType === "LINE_MANAGER" && <p className="text-cyan-300">Each employee&apos;s Line Manager</p>}
+                                  {stage.approverType === "GROUP" && stage.approvalGroup && (
+                                    <div className="space-y-1">
+                                      {approvalGroups.find((g: any) => g.group_name === stage.approvalGroup)?.members?.map((m: any, midx: number) => (
+                                        <div key={m.user_id || midx} className="flex items-center justify-between">
+                                          <span>{m.employee_name}</span>
+                                          {m.is_primary && <span className="rounded-full bg-cyan-500/20 px-1.5 py-0.5 text-[9px] text-cyan-300">Primary</span>}
+                                        </div>
+                                      )) || <span className="text-white/40">No members</span>}
                                     </div>
+                                  )}
+                                  {stage.approverType === "GROUP" && !stage.approvalGroup && <span className="text-white/40">Select a group</span>}
+                                  {stage.approverType === "USER" && stage.userId && <p>{users.find((u: any) => u.id === stage.userId)?.full_name}</p>}
+                                  {stage.approverType === "USER" && !stage.userId && <span className="text-white/40">Select a user</span>}
+                                  {stage.approverType === "ROLE" && stage.roleId && (() => {
+                                    const roleUsers = users.filter((u: any) => u.roles?.some((r: any) => r.name === stage.roleId));
+                                    return (
+                                      <div className="relative group">
+                                        <div className="truncate cursor-help text-xs">
+                                          {roleUsers.length === 0 ? <span className="text-white/40">No users</span> : roleUsers.map((u: any, idx: number) => <span key={u.id}>{u.full_name}{idx < roleUsers.length - 1 ? ", " : ""}</span>)}
+                                        </div>
+                                        {roleUsers.length > 0 && (
+                                          <div className="absolute left-0 top-full z-50 mt-1 hidden min-w-[180px] rounded-xl border border-white/20 bg-[#0d2147] p-2 shadow-xl group-hover:block">
+                                            {roleUsers.map((u: any, idx: number) => (
+                                              <div key={u.id} className="flex items-center gap-2 px-2 py-1.5 text-xs text-white">
+                                                <span className="text-white/40">{idx + 1}.</span>
+                                                <span>{u.full_name}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+                                  {stage.approverType === "ROLE" && !stage.roleId && <span className="text-white/40">Select a role</span>}
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="mb-2 block text-xs font-medium text-white/80">Min. Approver Count</label>
+                                {(stage.approverType === "GROUP" || stage.approverType === "ROLE") ? (
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={stage.minApproverCount}
+                                    onChange={(e) =>
+                                      setStages(stages.map((s) => s.id === stage.id ? { ...s, minApproverCount: e.target.value } : s))
+                                    }
+                                    className="h-10 w-full rounded-xl border border-white/10 bg-white/10 px-3 text-xs text-white"
+                                  />
+                                ) : (
+                                  <div className="h-10 rounded-xl border border-white/10 bg-white/5 px-3 flex items-center text-xs text-white/40 italic">
+                                    Not required
+                                  </div>
+                                )}
+                              </div>
+
+                            </div>
 
                                     <div className="mt-4">
 
@@ -1229,15 +1487,294 @@ useState<WorkflowStage[]>([]);
 
                           </div>
 
+                          {/* Approval Rules */}
+
+                            <div className="mt-5 grid gap-3 md:grid-cols-2">
+
+                              <div>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  toggleSection(stage.id, "rules")
+                                }
+                                className="
+                                flex
+                                w-full
+                                items-center
+                                justify-between
+                                rounded-xl
+                                border
+                                border-white/10
+                                bg-white/5
+                                px-4
+                                py-3
+                                text-left
+                                "
+                              >
+
+                                <span className="text-xs font-medium text-cyan-300">
+                                  Approval Rules
+                                </span>
+
+                                <span className="text-xs text-white/60">
+                                  {expandedSections[stage.id]?.rules
+                                    ? "âˆ’"
+                                    : "+"}
+                                </span>
+
+                              </button>
+                            
+
+                          {expandedSections[stage.id]?.rules && (
+
+                            <>
+
+
+                          <div className="mt-4">
+
+                            <label className="mb-3 block text-xs font-medium text-white/80">
+                              Allowed Actions
+                            </label>
+                            
+                            <div className="grid gap-2 md:grid-cols-2">
+
+                              {[
+                              {
+                                value: "APPROVE",
+                                label: "Approve",
+                                disabled: false,
+                              },
+
+                              {
+                                value: "BACK_TO_PREVIOUS_STAGE",
+                                label: "Back To Previous Stage",
+                                disabled: index === 0,
+                              },
+
+                              {
+                                value: "RETURN_TO_APPLICANT",
+                                label: "Return To Applicant",
+                                disabled:
+                                  stage.actionType ===
+                                  "Payment Processing",
+                              },
+
+                              {
+                                value: "FINAL_REJECT",
+                                label: "Final Reject",
+                                disabled:
+                                  stage.actionType ===
+                                  "Payment Processing",
+                              },
+                            ].map((action) => (
+
+                                <label
+                                  key={action.value}
+                                  className={`
+                                  flex
+                                  items-center
+                                  gap-2
+                                  rounded-xl
+                                  border
+                                  p-3
+                                  text-xs
+                                  ${
+                                    action.disabled
+                                      ? "border-white/5 bg-white/[0.02] text-white/30"
+                                      : "border-white/10 bg-white/5"
+                                  }
+                                  `}
+                                >
+
+                                  <input
+                                      type="checkbox"
+                                      disabled={action.disabled}
+                                      checked={
+                                        stage.allowedActions?.includes(
+                                          action.value
+                                        )
+                                      }
+                                    onChange={(e) => {
+
+                                      const updatedActions =
+                                        e.target.checked
+                                          ? [
+                                              ...(stage.allowedActions || []),
+                                              action.value,
+                                            ]
+                                          : (
+                                              stage.allowedActions || []
+                                            ).filter(
+                                              (x) =>
+                                                x !== action.value
+                                            );
+
+                                      setStages(
+                                        stages.map((s) =>
+                                          s.id === stage.id
+                                            ? {
+                                                ...s,
+                                                allowedActions:
+                                                  updatedActions,
+                                              }
+                                            : s
+                                        )
+                                      );
+
+                                    }}
+                                  />
+
+                                  {action.label}
+
+                                </label>
+
+                              ))}
+
+                            </div>
+
+                          </div>
+
+                          <div className="mt-5">
+
+                            <label className="mb-3 block text-xs font-medium text-white/80">
+                              Remarks Policy
+                            </label>
+
+                            <div className="grid gap-2 md:grid-cols-2">
+
+                              {[
+                                {
+                                  value: "APPROVE",
+                                  label: "Approve Requires Remarks",
+                                },
+                                {
+                                  value: "BACK_TO_PREVIOUS_STAGE",
+                                  label: "Back To Previous Stage Requires Remarks",
+                                },
+                                {
+                                  value: "RETURN_TO_APPLICANT",
+                                  label: "Return To Applicant Requires Remarks",
+                                },
+                                {
+                                  value: "FINAL_REJECT",
+                                  label: "Final Reject Requires Remarks",
+                                },
+                              ].map((action) => (
+
+                                <label
+                                  key={action.value}
+                                  className="
+                                  flex
+                                  items-center
+                                  gap-2
+                                  rounded-xl
+                                  border
+                                  border-white/10
+                                  bg-white/5
+                                  p-3
+                                  text-xs
+                                  "
+                                >
+
+                                  <input
+                                    type="checkbox"
+                                    checked={
+                                      stage.remarksRequired?.[
+                                        action.value as keyof typeof stage.remarksRequired
+                                      ]
+                                    }
+                                    onChange={(e) =>
+                                      setStages(
+                                        stages.map((s) =>
+                                          s.id === stage.id
+                                            ? {
+                                                ...s,
+                                                remarksRequired: {
+                                                  ...s.remarksRequired,
+                                                  [action.value]:
+                                                    e.target.checked,
+                                                },
+                                              }
+                                            : s
+                                        )
+                                      )
+                                    }
+                                  />
+
+                                  {action.label}
+
+                                </label>
+
+                              ))}
+
+                                </div>
+
+                            </div>
+                         
+                            </>
+
+                            )}
+
+                            </div>
+
+                            <div>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                toggleSection(stage.id, "notifications")
+                              }
+                              className="
+                              flex
+                              w-full
+                              items-center
+                              justify-between
+                              rounded-xl
+                              border
+                              border-white/10
+                              bg-white/5
+                              px-4
+                              py-3
+                              text-left
+                              "
+                            >
+
+                              <span className="text-xs font-medium text-cyan-300">
+                                Notifications
+                              </span>
+
+                              <span className="text-xs text-white/60">
+                                {expandedSections[stage.id]?.notifications
+                                  ? "âˆ’"
+                                  : "+"}
+                              </span>
+
+                            </button>
+
+                            {expandedSections[stage.id]?.notifications && (
+
+                            <>
+
+                            {console.log(
+                              "NOTIFICATION UI",
+                              stage.stageName,
+                              {
+                                mandatory: stage.mandatory,
+                                emailNotification: stage.emailNotification,
+                                inAppNotification: stage.inAppNotification,
+                              }
+                            )}
+
                             <div className="mt-4 grid gap-3 md:grid-cols-3">
+
+                              
 
                               <label className="flex items-center gap-2 text-xs">
 
                                 <input
                                   type="checkbox"
-                                  checked={
-                                    stage.mandatory
-                                  }
+                                  checked={!!stage.mandatory}
                                   onChange={(e) =>
                                     setStages(
                                       stages.map((s) =>
@@ -1261,17 +1798,14 @@ useState<WorkflowStage[]>([]);
 
                                 <input
                                   type="checkbox"
-                                  checked={
-                                    stage.emailNotification
-                                  }
+                                  checked={!!stage.emailNotification}
                                   onChange={(e) =>
                                     setStages(
                                       stages.map((s) =>
                                         s.id === stage.id
                                           ? {
                                               ...s,
-                                              emailNotification:
-                                                e.target.checked,
+                                              emailNotification: e.target.checked,
                                             }
                                           : s
                                       )
@@ -1287,22 +1821,19 @@ useState<WorkflowStage[]>([]);
 
                                 <input
                                   type="checkbox"
-                                  checked={
-                                    stage.inAppNotification
-                                  }
+                                  checked={!!stage.inAppNotification}
                                   onChange={(e) =>
-                                    setStages(
-                                      stages.map((s) =>
-                                        s.id === stage.id
-                                          ? {
-                                              ...s,
-                                              inAppNotification:
-                                                e.target.checked,
-                                            }
-                                          : s
-                                      )
+                                  setStages(
+                                    stages.map((s) =>
+                                      s.id === stage.id
+                                        ? {
+                                            ...s,
+                                            inAppNotification: e.target.checked,
+                                          }
+                                        : s
                                     )
-                                  }
+                                  )
+                                }
                                 />
 
                                 In-App Notification
@@ -1310,6 +1841,167 @@ useState<WorkflowStage[]>([]);
                               </label>
 
                             </div>
+
+                            <div className="mt-5">
+
+                              <label className="mb-3 block text-xs font-medium text-white/80">
+                                Applicant Notifications
+                              </label>
+
+                              <div className="grid gap-2 md:grid-cols-2">
+
+                                {[
+                                  {
+                                    key: "approval",
+                                    label: "Notify Applicant On Approval",
+                                  },
+                                  {
+                                    key: "returnToApplicant",
+                                    label: "Notify Applicant On Return",
+                                  },
+                                  {
+                                    key: "finalReject",
+                                    label: "Notify Applicant On Final Reject",
+                                  },
+                                  {
+                                    key: "workflowCompleted",
+                                    label: "Notify Applicant On Completion",
+                                  },
+                                ].map((notification) => (
+
+                                  <label
+                                    key={notification.key}
+                                    className="
+                                    flex
+                                    items-center
+                                    gap-2
+                                    rounded-xl
+                                    border
+                                    border-white/10
+                                    bg-white/5
+                                    p-3
+                                    text-xs
+                                    "
+                                  >
+
+                                    <input
+                                      type="checkbox"
+                                      checked={
+                                        stage.applicantNotification?.[
+                                          notification.key as keyof typeof stage.applicantNotification
+                                        ]
+                                      }
+                                      onChange={(e) =>
+                                        setStages(
+                                          stages.map((s) =>
+                                            s.id === stage.id
+                                              ? {
+                                                  ...s,
+                                                  applicantNotification: {
+                                                    ...s.applicantNotification,
+                                                    [notification.key]:
+                                                      e.target.checked,
+                                                  },
+
+
+                                                }
+                                              : s
+                                          )
+                                        )
+                                      }
+                                    />
+
+                                    {notification.label}
+
+                                  </label>
+
+                                ))}
+
+                              </div>
+
+                            </div>
+
+                              <div className="mt-5">
+
+                              <label className="mb-3 block text-xs font-medium text-white/80">
+                                Approver Notifications
+                              </label>
+
+                              <div className="grid gap-2 md:grid-cols-3">
+
+                                {[
+                                  {
+                                    key: "taskAssigned",
+                                    label: "Task Assigned",
+                                  },
+                                  {
+                                    key: "slaReminder",
+                                    label: "SLA Reminder",
+                                  },
+                                  {
+                                    key: "escalationTriggered",
+                                    label: "Escalation Triggered",
+                                  },
+                                ].map((notification) => (
+
+                                  <label
+                                    key={notification.key}
+                                    className="
+                                    flex
+                                    items-center
+                                    gap-2
+                                    rounded-xl
+                                    border
+                                    border-white/10
+                                    bg-white/5
+                                    p-3
+                                    text-xs
+                                    "
+                                  >
+
+                                    <input
+                                      type="checkbox"
+                                      checked={
+                                        stage.approverNotification?.[
+                                          notification.key as keyof typeof stage.approverNotification
+                                        ]
+                                      }
+                                      onChange={(e) =>
+                                      setStages(
+                                        stages.map((s) =>
+                                          s.id === stage.id
+                                            ? {
+                                                ...s,
+                                                approverNotification: {
+                                                  ...s.approverNotification,
+                                                  [notification.key]:
+                                                    e.target.checked,
+                                                },
+                                              }
+                                            : s
+                                        )
+                                      )
+                                    }
+                                    />
+
+                                    {notification.label}
+
+                                  </label>
+
+                                ))}
+
+                              </div>
+
+                            </div>
+
+                              </>
+
+                              )}
+                              
+
+                              </div>
+
+                          </div>
 
                           </div>
 
@@ -1339,7 +2031,36 @@ useState<WorkflowStage[]>([]);
                             approvalGroup: "",
                             approvalGroupId: "",
                             approverType: "GROUP",
+                            userId: "",
+                            roleId: "",
+                            userSearch: "",
+                            minApproverCount: "1",
                             actionType: "Approval",
+                            allowedActions: [
+                              "APPROVE",
+                              "BACK_TO_PREVIOUS_STAGE",
+                              "RETURN_TO_APPLICANT",
+                            ],
+
+                            remarksRequired: {
+                              APPROVE: false,
+                              BACK_TO_PREVIOUS_STAGE: true,
+                              RETURN_TO_APPLICANT: true,
+                              FINAL_REJECT: true,
+                            },
+
+                            applicantNotification: {
+                              approval: true,
+                              returnToApplicant: true,
+                              finalReject: true,
+                              workflowCompleted: true,
+                            },
+
+                            approverNotification: {
+                              taskAssigned: true,
+                              slaReminder: true,
+                              escalationTriggered: true,
+                            },
                             mandatory: true,
                             emailNotification: true,
                             inAppNotification: true,
@@ -1407,7 +2128,7 @@ useState<WorkflowStage[]>([]);
                           const invalidStage =
                             stages.find(
                               (stage) =>
-                                !stage.approvalGroup.trim()
+                                stage.approverType === "GROUP" && !stage.approvalGroupId
                             );
 
                           if (invalidStage) {
@@ -1602,7 +2323,7 @@ useState<WorkflowStage[]>([]);
                         </p>
 
                         <p className="mt-2 text-sm font-medium">
-                          {company}
+                          {companyName}
                         </p>
 
                       </div>
@@ -1793,7 +2514,7 @@ useState<WorkflowStage[]>([]);
                                   {
                                     approvalGroupDetails[
                                       stage.approvalGroup
-                                    ]?.approver ?? "-"
+                                    ]?.approvers?.join(", ") ?? "-"
                                   }
 
                                 </p>
@@ -1956,6 +2677,8 @@ useState<WorkflowStage[]>([]);
 
                                     name: workflowName,
 
+                                    company_id: company,
+
                                     reimbursement_type_ids: selectedExpenseTypeIds,
 
                                     module_name: "REIMBURSEMENT",
@@ -1972,16 +2695,19 @@ useState<WorkflowStage[]>([]);
 
                                   };
 
+                                  
+
                                   await workflowService.updateWorkflow(
                                     id as string,
                                     payload
                                   );
 
+                                  
+
                                   // Update/Create Workflow Stages
                                   for (const [index, stage] of stages.entries()) {
 
                                     const stepPayload = {
-
                                       workflow_id: id,
 
                                       step_order: index + 1,
@@ -1990,17 +2716,20 @@ useState<WorkflowStage[]>([]);
 
                                       action_type: stage.actionType,
 
-                                      approver_type: stage.approverType ?? "GROUP",
+                                      approver_type:
+                                        stage.approverType ?? "GROUP",
 
                                       approval_group_id:
-                                        stage.approvalGroupId || null,
+                                        stage.approverType === "GROUP" ? stage.approvalGroupId || null : null,
 
-                                      role_id: null,
+                                      role_id:
+                                        stage.approverType === "ROLE" ? stage.roleId || null : null,
 
-                                      user_id: null,
+                                      user_id:
+                                        stage.approverType === "USER" ? stage.userId || null : null,
 
                                       min_approver_count:
-                                        stage.mandatory ? 1 : 0,
+                                        Number(stage.minApproverCount) || 1,
 
                                       can_edit_amount:
                                         stage.actionType ===
@@ -2014,6 +2743,42 @@ useState<WorkflowStage[]>([]);
                                         stage.actionType ===
                                         "Payment Processing",
 
+                                      email_notification:
+                                          stage.emailNotification,
+
+                                        in_app_notification:
+                                          stage.inAppNotification,
+
+                                      sla_enabled:
+                                        stage.approverNotification.slaReminder,                                     
+                                      
+
+                                      sla_hours:
+                                        stage.approverNotification.slaReminder
+                                          ? Number(stage.slaHours || 0)
+                                          : null,
+
+                                      escalation_enabled:
+                                        stage.approverNotification.escalationTriggered,
+
+                                      escalation_hours:
+                                        stage.approverNotification.escalationTriggered
+                                          ? Number(stage.escalationHours || 0)
+                                          : null,
+
+                                      escalation_group:
+                                        stage.approverNotification.escalationTriggered
+                                          ? stage.escalationGroup || null
+                                          : null,
+
+                                      allowed_actions:
+                                        stage.allowedActions,
+
+                                      remarks_required:
+                                        stage.remarksRequired,
+
+                                      applicant_notification:
+                                        stage.applicantNotification,
                                     };
 
                                     if (
@@ -2094,3 +2859,5 @@ useState<WorkflowStage[]>([]);
     </PermissionGuard>
   );
 }
+
+

@@ -123,7 +123,14 @@ async deleteWorkflowStep(
 
 },
 
-async getReimbursementTypes() {
+async getMatchingWorkflow(amount: number, expenseTypeIds: string[]) {
+    const response = await apiClient.get(
+      `/workflow/match?amount=${amount}&expense_type_ids=${expenseTypeIds.join(",")}`
+    );
+    return response.data;
+  },
+
+  async getReimbursementTypes() {
 
   const response =
     await apiClient.get(

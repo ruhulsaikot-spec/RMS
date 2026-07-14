@@ -1,10 +1,13 @@
-"use client";
+﻿"use client";
 
 import React, { useState } from "react";
 import { toast } from "sonner";
 import { useEffect } from "react";
 import { approvalGroupService } from "@/services/approval-group.service";
 import { expenseTypeService } from "@/services/expense-type.service";
+import { companyService } from "@/services/company.service";
+import { employeeService } from "@/services/employee.service";
+import { userService } from "@/services/user.service";
 import { useRouter } from "next/navigation";
 import { workflowService } from "@/services/workflow.service";
 
@@ -23,7 +26,7 @@ export default function NewWorkflowPage() {
     useState("");
 
   const [company, setCompany] =
-  useState("WyzeTech Ltd");
+  useState("");
 
   const [status, setStatus] =
     useState("Active");
@@ -35,6 +38,17 @@ export default function NewWorkflowPage() {
 
   const [expenseTypeList, setExpenseTypeList] =
   useState<any[]>([]);
+
+  const [companies, setCompanies] =
+  useState<any[]>([]);
+
+  const getCompanyName = () => {
+  return (
+    companies.find(
+      (item: any) => item.id === company
+    )?.name ?? "-"
+  );
+};
 
   const [isDefaultWorkflow, setIsDefaultWorkflow] =
   useState(true);
@@ -48,14 +62,22 @@ export default function NewWorkflowPage() {
   const [approvalGroups, setApprovalGroups] =
   useState<any[]>([]);
 
+  const [employees, setEmployees] =
+  useState<any[]>([]);
+
+  const [users, setUsers] =
+  useState<any[]>([]);
+
 const [approvalGroupDetails, setApprovalGroupDetails] =
-  useState<Record<
-    string,
-    {
-      approver: string;
-      designation: string;
-    }
-  >>({});
+  useState<
+    Record<
+      string,
+      {
+        approvers: string[];
+        designations: string[];
+      }
+    >
+  >({});
 
 const [showPublishConfirm, setShowPublishConfirm] =
   useState(false);
@@ -75,11 +97,15 @@ const loadApprovalGroups = async () => {
 
       details[group.group_name] = {
 
-        approver:
-          group.members?.[0]?.employee_name ?? "-",
+        approvers:
+          group.members?.map(
+            (m: any) => m.employee_name
+          ) ?? [],
 
-        designation:
-          group.members?.[0]?.designation_name ?? "-",
+        designations:
+          group.members?.map(
+            (m: any) => m.designation_name
+          ) ?? [],
 
       };
 
@@ -97,6 +123,55 @@ const loadApprovalGroups = async () => {
 
 };
 
+const loadCompanies = async () => {
+
+  try {
+
+    const data =
+      await companyService.getCompanies();
+
+    setCompanies(data);
+
+    if (data.length > 0) {
+
+      setCompany((prev) =>
+        prev || data[0].id
+      );
+
+    }
+
+  } catch (error) {
+
+    console.error(error);
+
+    toast.error(
+      "Failed to load companies."
+    );
+
+  }
+
+};
+
+  const loadEmployees = async () => {
+    try {
+      const data = await employeeService.getEmployees();
+      const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+      setEmployees(list);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const loadUsers = async () => {
+    try {
+      const response = await userService.getUsers();
+      const list = response?.data || response || [];
+      setUsers(list);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   const [expandedSections, setExpandedSections] =
   useState<Record<number, {
     rules: boolean;
@@ -108,9 +183,16 @@ const loadApprovalGroups = async () => {
 
     loadApprovalGroups();
 
+    loadCompanies();
+
     loadExpenseTypes();
 
+    loadEmployees();
+    loadUsers();
+
   }, []);
+
+
 const loadExpenseTypes = async () => {
 
   try {
@@ -146,8 +228,13 @@ setSelectedExpenseTypeIds([]);
     {
     id: 1,
     stageName: "",
+    approverType: "GROUP",
     approvalGroup: "",
     approvalGroupId: "",
+    userId: "",
+    roleId: "",
+    userSearch: "",
+    minApproverCount: "1",
     actionType: "Approval",
 
     allowedActions: [
@@ -617,12 +704,17 @@ setSelectedExpenseTypeIds([]);
                           "
                         >
 
-                          <option
-                            value="WyzeTech Ltd"
-                            className="bg-[#17386E]"
-                          >
-                            WyzeTech Ltd
-                          </option>
+                          {companies.map((companyItem: any) => (
+
+                              <option
+                                key={companyItem.id}
+                                value={companyItem.id}
+                                className="bg-[#17386E]"
+                              >
+                                {companyItem.name}
+                              </option>
+
+                            ))}
 
                         </select>
 
@@ -897,22 +989,27 @@ setSelectedExpenseTypeIds([]);
                               <div className="mt-2 flex flex-wrap gap-2">
 
                                 {stage.approvalGroup && (
-
-                                  <span
-                                    className="
-                                    rounded-lg
-                                    border
-                                    border-cyan-500/20
-                                    bg-cyan-500/10
-                                    px-2
-                                    py-1
-                                    text-[10px]
-                                    text-cyan-300
-                                    "
-                                  >
+                                  <span className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-[10px] text-cyan-300">
                                     {stage.approvalGroup}
                                   </span>
+                                )}
 
+                                {stage.approverType === "LINE_MANAGER" && (
+                                  <span className="rounded-lg border border-purple-500/20 bg-purple-500/10 px-2 py-1 text-[10px] text-purple-300">
+                                    Line Manager
+                                  </span>
+                                )}
+
+                                {stage.approverType === "USER" && stage.userId && (
+                                  <span className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-[10px] text-cyan-300">
+                                    {users.find((u: any) => u.id === stage.userId)?.full_name || stage.userId}
+                                  </span>
+                                )}
+
+                                {stage.approverType === "ROLE" && stage.roleId && (
+                                  <span className="rounded-lg border border-yellow-500/20 bg-yellow-500/10 px-2 py-1 text-[10px] text-yellow-300">
+                                    Role: {stage.roleId}
+                                  </span>
                                 )}
 
                                 <span
@@ -954,7 +1051,7 @@ setSelectedExpenseTypeIds([]);
 
                           </div>
 
-                            <div className="grid gap-4 md:grid-cols-3">
+                            <div className="grid gap-4 md:grid-cols-5">
 
                               <div>
 
@@ -996,34 +1093,71 @@ setSelectedExpenseTypeIds([]);
                               <div>
 
                                 <label className="mb-2 block text-xs font-medium text-white/80">
+                                  Approver Type
+                                </label>
+
+                                <select
+                                  value={stage.approverType}
+                                  onChange={(e) =>
+                                    setStages(
+                                      stages.map((s) =>
+                                        s.id === stage.id
+                                          ? {
+                                              ...s,
+                                              approverType: e.target.value,
+                                              approvalGroup: "",
+                                              approvalGroupId: "",
+                                              userId: "",
+                                              roleId: "",
+                                            }
+                                          : s
+                                      )
+                                    )
+                                  }
+                                  className="
+                                  h-10
+                                  w-full
+                                  rounded-xl
+                                  border
+                                  border-white/10
+                                  bg-white/10
+                                  px-3
+                                  text-xs
+                                  text-white
+                                  "
+                                >
+                                  <option value="GROUP" className="bg-[#17386E]">Approval Group</option>
+                                  <option value="LINE_MANAGER" className="bg-[#17386E]">Line Manager</option>
+                                  <option value="USER" className="bg-[#17386E]">Specific User</option>
+                                  <option value="ROLE" className="bg-[#17386E]">Role</option>
+                                </select>
+
+                              </div>
+
+                              {stage.approverType === "GROUP" && (
+                              <div>
+
+                                <label className="mb-2 block text-xs font-medium text-white/80">
                                   Approval Group
                                 </label>
 
                                 <select
-                                  value={
-                                    stage.approvalGroup
-                                  }
+                                  value={stage.approvalGroup}
                                   onChange={(e) => {
-
-                                    const selectedGroup =
-                                      approvalGroups.find(
-                                        (group: any) =>
-                                          group.group_name === e.target.value
-                                      );
-
+                                    const selectedGroup = approvalGroups.find(
+                                      (group: any) => group.group_name === e.target.value
+                                    );
                                     setStages(
                                       stages.map((s) =>
                                         s.id === stage.id
                                           ? {
                                               ...s,
                                               approvalGroup: e.target.value,
-                                              approvalGroupId:
-                                                selectedGroup?.id ?? "",
+                                              approvalGroupId: selectedGroup?.id ?? "",
                                             }
                                           : s
                                       )
                                     );
-
                                   }}
                                   className="
                                   h-10
@@ -1037,78 +1171,230 @@ setSelectedExpenseTypeIds([]);
                                   text-white
                                   "
                                 >
+                                  <option value="" className="bg-[#17386E]">Select Group</option>
+                                  {approvalGroups.map((group: any) => (
+                                    <option key={group.id} value={group.group_name} className="bg-[#17386E]">
+                                      {group.group_name}
+                                    </option>
+                                  ))}
+                                </select>
 
-                                  <option
-                                    value=""
-                                    className="bg-[#17386E]"
-                                  >
-                                    Select Group
-                                  </option>
+                              </div>
+                              )}
 
-                                  {approvalGroups.map(
-                                   (group: any) => ( 
-                                      <option
-                                        key={group.id}
-                                        value={group.group_name}
-                                        className="bg-[#17386E]"
-                                      >
-                                        {group.group_name}
-                                      </option>
+                              {stage.approverType === "LINE_MANAGER" && (
+                              <div>
+                                <label className="mb-2 block text-xs font-medium text-white/80">
+                                  Approver
+                                </label>
+                                <div className="h-10 rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 flex items-center text-xs text-cyan-300">
+                                  Auto — Employee&apos;s Line Manager
+                                </div>
+                              </div>
+                              )}
+
+                              {stage.approverType === "ROLE" && (
+                              <div>
+                                <label className="mb-2 block text-xs font-medium text-white/80">
+                                  Select Role
+                                </label>
+                                <select
+                                  value={stage.roleId}
+                                  onChange={(e) =>
+                                    setStages(
+                                      stages.map((s) =>
+                                        s.id === stage.id ? { ...s, roleId: e.target.value } : s
+                                      )
                                     )
+                                  }
+                                  className="h-10 w-full rounded-xl border border-white/10 bg-white/10 px-3 text-xs text-white"
+                                >
+                                  <option value="" className="bg-[#17386E]">Select Role</option>
+                                  <option value="approver" className="bg-[#17386E]">Approver</option>
+                                  <option value="finance" className="bg-[#17386E]">Finance</option>
+                                  <option value="admin" className="bg-[#17386E]">Admin</option>
+                                </select>
+                              </div>
+                              )}
+
+                              {stage.approverType === "USER" && (
+                              <div>
+                                <label className="mb-2 block text-xs font-medium text-white/80">
+                                  Select User
+                                </label>
+                                <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
+                                  <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
+                                    <svg className="h-3.5 w-3.5 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                    </svg>
+                                    <input
+                                      type="text"
+                                      placeholder="Search by name or ID..."
+                                      value={stage.userSearch ?? ""}
+                                      onChange={(e) =>
+                                        setStages(
+                                          stages.map((s) =>
+                                            s.id === stage.id ? { ...s, userSearch: e.target.value } : s
+                                          )
+                                        )
+                                      }
+                                      className="flex-1 bg-transparent text-xs text-white placeholder:text-white/30 outline-none"
+                                    />
+                                    {stage.userSearch && (
+                                      <button
+                                        onClick={() =>
+                                          setStages(stages.map((s) =>
+                                            s.id === stage.id ? { ...s, userSearch: "" } : s
+                                          ))
+                                        }
+                                        className="text-white/30 hover:text-white/60"
+                                      >
+                                        ✕
+                                      </button>
+                                    )}
+                                  </div>
+                                  <div className="max-h-40 overflow-y-auto">
+                                    {users
+                                      .filter((u: any) => {
+                                        if (stage.userId && !stage.userSearch) return false;
+                                        return !stage.userSearch ||
+                                          u.full_name?.toLowerCase().includes((stage.userSearch ?? "").toLowerCase()) ||
+                                          u.employee_id?.toLowerCase().includes((stage.userSearch ?? "").toLowerCase());
+                                      })
+                                      .map((u: any) => (
+                                        <div
+                                          key={u.id}
+                                          onClick={() =>
+                                            setStages(stages.map((s) =>
+                                              s.id === stage.id ? { ...s, userId: u.id, userSearch: "" } : s
+                                            ))
+                                          }
+                                          className={`flex cursor-pointer items-center justify-between px-3 py-2 text-xs hover:bg-cyan-500/10 transition-colors ${
+                                            stage.userId === u.id ? "bg-cyan-500/15 text-cyan-300" : "text-white"
+                                          }`}
+                                        >
+                                          <span>{u.full_name}</span>
+                                          <span className="text-white/40">{u.employee_id}</span>
+                                        </div>
+                                      ))}
+                                    {(stage.userSearch && users.filter((u: any) =>
+                                      u.full_name?.toLowerCase().includes((stage.userSearch ?? "").toLowerCase()) ||
+                                      u.employee_id?.toLowerCase().includes((stage.userSearch ?? "").toLowerCase())
+                                    ).length === 0) && (
+                                      <div className="px-3 py-4 text-center text-xs text-white/30">
+                                        No employee found
+                                      </div>
+                                    )}
+                                  </div>
+                                  {stage.userId && (
+                                    <div className="border-t border-white/10 px-3 py-2 text-xs text-cyan-300">
+                                      Selected: {users.find((u: any) => u.id === stage.userId)?.full_name}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              )}
+
+                              <div>
+                                <label className="mb-2 block text-xs font-medium text-white/80">
+                                  Selected Approver
+                                </label>
+                                
+                                <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-300 min-h-[40px]">
+
+                                  {stage.approverType === "LINE_MANAGER" && (
+                                    <div>                                      
+                                      <p className="text-cyan-300">Not required</p>
+                                    </div>
                                   )}
 
-                                  </select>
-
+                                  {stage.approverType === "GROUP" && stage.approvalGroup && (
+                                    <div className="space-y-1">
+                                      {approvalGroups
+                                        .find((g: any) => g.group_name === stage.approvalGroup)
+                                        ?.members?.map((m: any, midx: number) => (
+                                          <div key={m.user_id || midx} className="flex items-center justify-between">
+                                            <span>{m.employee_name}</span>
+                                            {m.is_primary && (
+                                              <span className="rounded-full bg-cyan-500/20 px-1.5 py-0.5 text-[9px] text-cyan-300">Primary</span>
+                                            )}
+                                          </div>
+                                        )) || <span className="text-white/40">No members</span>}
                                     </div>
+                                  )}
 
+                                  {stage.approverType === "GROUP" && !stage.approvalGroup && (
+                                    <span className="text-white/40">Select a group</span>
+                                  )}
+
+                                  {stage.approverType === "USER" && stage.userId && (
                                     <div>
+                                      <p>{users.find((u: any) => u.id === stage.userId)?.full_name}</p>
+                                    </div>
+                                  )}
 
-                                      <label className="mb-2 block text-xs font-medium text-white/80">
-                                        Primary Approver
-                                      </label>
+                                  {stage.approverType === "USER" && !stage.userId && (
+                                    <span className="text-white/40">Select a user</span>
+                                  )}
 
-                                      <div
-                                        className="
-                                        h-10
-                                        rounded-xl
-                                        border
-                                        border-cyan-500/20
-                                        bg-cyan-500/10
-                                        px-3
-                                        flex
-                                        items-center
-                                        text-xs
-                                        text-cyan-300
-                                        "
-                                      >
-
-                                        {
-                                          stage.approvalGroup
-                                            ? approvalGroupDetails[
-                                                stage.approvalGroup as keyof typeof approvalGroupDetails
-                                              ]?.approver
-                                            : "Select approval group"
-                                        }
-
+                                  {stage.approverType === "ROLE" && stage.roleId && (() => {
+                                    const roleUsers = users.filter((u: any) => u.roles?.some((r: any) => r.name === stage.roleId));
+                                    return (
+                                      <div className="relative group">
+                                        <div className="truncate cursor-help text-xs">
+                                          {roleUsers.length === 0
+                                            ? <span className="text-white/40">No users with this role</span>
+                                            : roleUsers.map((u: any, idx: number) => (
+                                                <span key={u.id}>{u.full_name}{idx < roleUsers.length - 1 ? ", " : ""}</span>
+                                              ))}
+                                        </div>
+                                        {roleUsers.length > 0 && (
+                                          <div className="absolute left-0 top-full z-50 mt-1 hidden min-w-[180px] rounded-xl border border-white/20 bg-[#0d2147] p-2 shadow-xl group-hover:block">
+                                            {roleUsers.map((u: any, idx: number) => (
+                                              <div key={u.id} className="flex items-center gap-2 px-2 py-1.5 text-xs text-white">
+                                                <span className="text-white/40">{idx + 1}.</span>
+                                                <span>{u.full_name}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
                                       </div>
+                                    );
+                                  })()}
 
-                                      {stage.approvalGroup && (
+                                  {stage.approverType === "ROLE" && !stage.roleId && (
+                                    <span className="text-white/40">Select a role</span>
+                                  )}
 
-                                        <p className="mt-1 text-[11px] text-white/60">
+                                </div>
+                              </div>
 
-                                          {
-                                            approvalGroupDetails[
-                                              stage.approvalGroup as keyof typeof approvalGroupDetails
-                                            ]?.designation
-                                          }
+                              <div>
+                                <label className="mb-2 block text-xs font-medium text-white/80">
+                                  Min. Approver Count
+                                </label>
+                                {(stage.approverType === "GROUP" || stage.approverType === "ROLE") ? (
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={stage.minApproverCount}
+                                    onChange={(e) =>
+                                      setStages(stages.map((s) =>
+                                        s.id === stage.id ? { ...s, minApproverCount: e.target.value } : s
+                                      ))
+                                    }
+                                    className="h-10 w-full rounded-xl border border-white/10 bg-white/10 px-3 text-xs text-white"
+                                  />
+                                ) : (
+                                  <div className="h-10 rounded-xl border border-white/10 bg-white/5 px-3 flex items-center text-xs text-white/40">
+                                                                       
+                                      <p className="text-cyan-300">Not required</p>
+                                    
+                                  </div>
+                                )}
+                              </div>
 
-                                        </p>
-
-                                      )}
-
-                                    </div>
-
-                                    </div>
+                            </div>
 
                                     <div className="mt-4">
 
@@ -1261,7 +1547,7 @@ setSelectedExpenseTypeIds([]);
 
                                 <span className="text-xs text-white/60">
                                   {expandedSections[stage.id]?.rules
-                                    ? "−"
+                                    ? "âˆ’"
                                     : "+"}
                                 </span>
 
@@ -1488,7 +1774,7 @@ setSelectedExpenseTypeIds([]);
 
                               <span className="text-xs text-white/60">
                                 {expandedSections[stage.id]?.notifications
-                                  ? "−"
+                                  ? "âˆ’"
                                   : "+"}
                               </span>
 
@@ -1765,8 +2051,13 @@ setSelectedExpenseTypeIds([]);
                           {
                             id: Date.now(),
                             stageName: "",
+                            approverType: "GROUP",
                             approvalGroup: "",
                             approvalGroupId: "",
+                            userId: "",
+                            roleId: "",
+                            userSearch: "",
+                            minApproverCount: "1",
                             actionType: "Approval",
 
                             allowedActions: [
@@ -1864,20 +2155,16 @@ setSelectedExpenseTypeIds([]);
                           const invalidStage =
                             stages.find(
                               (stage) =>
-                                !stage.approvalGroup.trim()
+                                stage.approverType === "GROUP" && !stage.approvalGroupId
                             );
-
                           if (invalidStage) {
-
                             toast.error(
                               `${
                                 invalidStage.stageName ||
                                 "Stage"
                               } requires an Approval Group.`
                             );
-
                             return;
-
                           }
 
                         const paymentStages =
@@ -2059,8 +2346,12 @@ setSelectedExpenseTypeIds([]);
                         </p>
 
                         <p className="mt-2 text-sm font-medium">
-                          {company}
-                        </p>
+                        {
+                          companies.find(
+                            (item: any) => item.id === company
+                          )?.name ?? "-"
+                        }
+                      </p>
 
                       </div>
 
@@ -2250,85 +2541,12 @@ setSelectedExpenseTypeIds([]);
                                   {
                                     approvalGroupDetails[
                                       stage.approvalGroup as keyof typeof approvalGroupDetails
-                                    ]?.approver || "-"
+                                    ]?.approvers?.join(", ") || "-"
                                   }
 
                                 </p>
 
-                                <div className="mt-3 space-y-2 text-[10px]">
-
-                                  <div>
-                                    <p className="text-white/40">
-                                      Actions
-                                    </p>
-
-                                    <p className="text-cyan-300">
-                                      {
-                                        stage.allowedActions?.join(", ") || "-"
-                                      }
-                                    </p>
-                                  </div>
-
-                                  <div>
-                                    <p className="text-white/40">
-                                      Remarks
-                                    </p>
-
-                                    <p className="text-yellow-300">
-                                      {
-                                        Object.entries(
-                                          stage.remarksRequired || {}
-                                        )
-                                          .filter(
-                                            ([, value]) => value
-                                          )
-                                          .map(
-                                            ([key]) => key
-                                          )
-                                          .join(", ") || "-"
-                                      }
-                                    </p>
-                                  </div>
-
-                                  <div>
-                                    <p className="text-white/40">
-                                      Applicant Notification
-                                    </p>
-
-                                    <p className="text-green-300">
-                                      {
-                                        Object.entries(
-                                          stage.applicantNotification || {}
-                                        )
-                                          .filter(
-                                            ([, value]) => value
-                                          )
-                                          .length
-                                      }
-                                      {" "}Enabled
-                                    </p>
-                                  </div>
-
-                                  <div>
-                                    <p className="text-white/40">
-                                      Approver Notification
-                                    </p>
-
-                                    <p className="text-purple-300">
-                                      {
-                                        Object.entries(
-                                          stage.approverNotification || {}
-                                        )
-                                          .filter(
-                                            ([, value]) => value
-                                          )
-                                          .length
-                                      }
-                                      {" "}Enabled
-                                    </p>
-                                  </div>
-
-                                </div>
+                              <div className="mt-3" />
 
                               </div>
 
@@ -2490,7 +2708,10 @@ setSelectedExpenseTypeIds([]);
 
                                 // 1. CREATE WORKFLOW
                                 const payload = {
-                                  name: workflowName,
+
+                                name: workflowName,
+
+                                company_id: company,
 
                                   reimbursement_type_ids: selectedExpenseTypeIds.filter(Boolean),
 
@@ -2522,9 +2743,8 @@ setSelectedExpenseTypeIds([]);
 
                                   }
 
-                                // 2. CREATE STEPS (STAGES → BACKEND FORMAT)
+                                // 2. CREATE STEPS (STAGES â†’ BACKEND FORMAT)
                                 const stepPayloads = stages.map((stage: any, index: number) => ({
-
                                   workflow_id: workflowId,
 
                                   step_order: index + 1,
@@ -2534,18 +2754,19 @@ setSelectedExpenseTypeIds([]);
                                   action_type: stage.actionType,
 
                                   approver_type:
-                                    stage.approvalGroupId
-                                      ? "GROUP"
-                                      : "LINE_MANAGER",
+                                    stage.approverType,
 
                                   approval_group_id:
-                                    stage.approvalGroupId || null,
+                                    stage.approverType === "GROUP" ? stage.approvalGroupId || null : null,
 
-                                  role_id: null,
+                                  role_id:
+                                    stage.approverType === "ROLE" ? stage.roleId || null : null,
 
-                                  user_id: null,
+                                  user_id:
+                                    stage.approverType === "USER" ? stage.userId || null : null,
 
-                                  min_approver_count: 1,
+                                  min_approver_count:
+                                    Number(stage.minApproverCount) || 1,
 
                                   can_edit_amount:
                                     stage.actionType ===
@@ -2553,13 +2774,52 @@ setSelectedExpenseTypeIds([]);
 
                                   is_finance_step:
                                     stage.actionType ===
-                                    "Amount Verification",
+                                    "Finance Verification",
 
                                   is_payment_step:
                                     stage.actionType ===
                                     "Payment Processing",
 
-                              }));
+                                  // Applicant Notification
+                                  email_notification:
+                                    stage.emailNotification,
+
+                                  // Approver Notification
+                                  in_app_notification:
+                                    stage.inAppNotification,
+
+                                  // SLA Reminder
+                                  sla_enabled:
+                                    stage.approverNotification.slaReminder,
+
+                                  sla_hours:
+                                    stage.slaEnabled
+                                      ? Number(stage.slaHours || 0)
+                                      : null,
+
+                                  // Escalation Trigger
+                                  escalation_enabled:
+                                    stage.approverNotification.escalationTriggered,
+
+                                  escalation_hours:
+                                    stage.escalationEnabled
+                                      ? Number(stage.escalationHours || 0)
+                                      : null,
+
+                                  escalation_group:
+                                    stage.escalationEnabled
+                                      ? stage.escalationGroup || null
+                                      : null,
+
+                                  allowed_actions:
+                                    stage.allowedActions,
+
+                                  remarks_required:
+                                    stage.remarksRequired,
+
+                                  applicant_notification:
+                                    stage.applicantNotification,
+                                }));
 
                                 // 3. SAVE STEPS ONE BY ONE
                                 for (const step of stepPayloads) {
@@ -2619,3 +2879,5 @@ setSelectedExpenseTypeIds([]);
     </PermissionGuard>
   );
 }
+
+                              

@@ -4,6 +4,7 @@ import {
   useState,
   useEffect,
 } from "react";
+import { useParams, useRouter } from "next/navigation";
 
 import { useUser }
   from "@/contexts/user-context";
@@ -16,8 +17,6 @@ import { employeeService }
 
 import { expenseTypeService }
   from "@/services/expense-type.service";
-
-import { workflowService } from "@/services/workflow.service";
 
 import { projectService }
   from "@/services/project.service";
@@ -38,7 +37,11 @@ import ClaimDetailsStep, { validateClaimDetails } from "@/components/claims/Clai
 import PermissionGuard from "@/components/auth/permission-guard";
 import { toast } from "sonner";
 
-export default function NewClaimPage() {
+export default function EditClaimPage() {
+  const params = useParams();
+  const router = useRouter();
+  const applicationId = params.id as string;
+
   const {
     currentUser,
     isLoaded,
@@ -57,13 +60,13 @@ export default function NewClaimPage() {
   const [saving, setSaving] =
     useState(false);
 
+  const [loadingClaim, setLoadingClaim] = useState(true);
+
   const [expenseTypes, setExpenseTypes] =
     useState<any[]>([]);
 
   const [projects, setProjects] =
     useState<any[]>([]);
-
-  const [matchedWorkflow, setMatchedWorkflow] = useState<any>(null);
 
   const [applicationNo, setApplicationNo] =
     useState("");
@@ -71,6 +74,63 @@ export default function NewClaimPage() {
   const [claimNumber] = useState(
     `CLM-${new Date().getFullYear()}-0000001`
   );
+
+  useEffect(() => {
+    if (!applicationId) return;
+    const loadClaim = async () => {
+      try {
+        const data = await reimbursementService.getApplicationById(applicationId);
+        if (data) {
+          // Load existing attachments — keep separately
+          if (data.attachments?.length > 0) {
+            setUploadedFileIds([]);
+            setUploadedFileMeta(data.attachments.map((a: any) => ({
+              id: a.id,
+              original_name: a.file_name,
+              storage_path: a.file_url,
+              isExisting: true,
+            })));
+          }
+
+          setFormData({
+            purpose: data.data?.purpose || "",
+            remarks: data.data?.remarks || "",
+            claimDate: data.created_at ? data.created_at.split("T")[0] : new Date().toISOString().split("T")[0],
+            attachments: data.attachments?.map((a: any) => ({ name: a.file_name, size: null })) || [],
+            expenseItems: data.expense_items?.length > 0
+              ? data.expense_items.map((item: any, idx: number) => ({
+                  id: idx + 1,
+                  expenseDate: item.expense_date || "",
+                  claimType: item.claim_type || "",
+                  purpose: item.purpose || "",
+                  mode: item.mode || "",
+                  project: item.project || "",
+                  from: item.from_location || "",
+                  to: item.to_location || "",
+                  amount: item.amount?.toString() || "",
+                }))
+              : [{
+                  id: Date.now(),
+                  expenseDate: "",
+                  claimType: "",
+                  purpose: "",
+                  mode: "",
+                  project: "",
+                  from: "",
+                  to: "",
+                  amount: "",
+                }],
+          });
+        }
+      } catch (error) {
+        console.error(error);
+        toast.error("Failed to load claim data.");
+      } finally {
+        setLoadingClaim(false);
+      }
+    };
+    loadClaim();
+  }, [applicationId]);
 
   useEffect(() => {
     const loadMasterData = async () => {
@@ -191,7 +251,7 @@ export default function NewClaimPage() {
           </div>
 
           <h1 className="mt-4 text-lg font-semibold">
-            Claim Submitted Successfully
+            Claim Updated Successfully
           </h1>
 
           <p className="mt-3 text-white/60">
@@ -272,8 +332,8 @@ export default function NewClaimPage() {
         <section className="flex-1">
 
           <Topbar
-            title="Create Claim"
-            subtitle="Submit reimbursement request"
+            title="Edit Claim"
+            subtitle="Update reimbursement application"
           />
 
           <div className="p-6">
@@ -283,11 +343,11 @@ export default function NewClaimPage() {
               {/* Header */}
               <div className="mb-5">
                 <h1 className="text-xl font-semibold">
-                  Create New Claim
+                  Edit Claim
                 </h1>
 
                 <p className="mt-1 text-xs text-white/60">
-                  Submit reimbursement request
+                  Update reimbursement application
                 </p>
               </div>
 
@@ -482,11 +542,19 @@ export default function NewClaimPage() {
                             }
 
                             setUploadedFileIds(
-                              [
-                                ...uploadedFileIds,
-                                ...uploadedIds,
-                              ]
-                            );
+                                [
+                                  ...uploadedFileIds,
+                                  ...uploadedIds,
+                                ]
+                              );
+
+                              setFormData((prev: any) => ({
+                                ...prev,
+                                attachments: [
+                                  ...(prev.attachments || []),
+                                  ...validFiles.map((f: File) => ({ name: f.name, size: f.size })),
+                                ],
+                              }));
 
                             setFormData({
                               ...formData,
@@ -583,7 +651,7 @@ export default function NewClaimPage() {
                                   </p>
 
                                   <p className="text-xs text-white/50">
-                                    {(file.size / 1024 / 1024).toFixed(2)} MB
+                                    {file.size ? (file.size / 1024 / 1024).toFixed(2) + " MB" : ""}
                                   </p>
 
                                 </div>
@@ -607,7 +675,9 @@ export default function NewClaimPage() {
                                     setUploadedFileIds(
                                       updatedIds
                                     );
-
+                                    setUploadedFileMeta((prev: any[]) =>
+                                      prev.filter((_: any, i: number) => i !== index)
+                                    );
                                     setFormData({
                                       ...formData,
                                       attachments: updatedFiles,
@@ -901,7 +971,7 @@ export default function NewClaimPage() {
                                 </p>
 
                                 <p className="text-xs text-white/50">
-                                  {(file.size / 1024 / 1024).toFixed(2)} MB
+                                  {file.size ? (file.size / 1024 / 1024).toFixed(2) + " MB" : ""}
                                 </p>
 
                                 <button
@@ -968,40 +1038,37 @@ export default function NewClaimPage() {
                         Approval Workflow
                       </h3>
 
-                      {matchedWorkflow ? (
-                        <div>
-                          <p className="mt-1 text-xs text-white/50 mb-3">{matchedWorkflow.name}</p>
-                          <div className="flex flex-wrap items-center gap-2 text-sm">
-                            <div className="rounded-xl bg-cyan-500/10 px-3 py-2 text-xs">
-                              Applicant
-                            </div>
-                            {matchedWorkflow.stages?.map((stage: any, idx: number) => (
-                              <div key={idx} className="flex items-center gap-2">
-                                <span className="text-white/40">→</span>
-                                <div className={`rounded-xl px-3 py-2 text-xs ${
-                                  stage.action_type === "Payment Processing"
-                                    ? "bg-green-500/10 text-green-300"
-                                    : stage.action_type === "Amount Verification"
-                                    ? "bg-yellow-500/10 text-yellow-300"
-                                    : "bg-white/5 text-white"
-                                }`}>
-                                  <div>{stage.stage_name || `Stage ${stage.step_order}`}</div>
-                                  {stage.approver_label && (
-                                    <div className="text-[10px] text-white/40 mt-0.5">{stage.approver_label}</div>
-                                  )}
-                                  {stage.min_approver_count && (
-                                    <div className="text-[10px] text-white/40">Min. Approver: {stage.min_approver_count}</div>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+
+                        <div className="rounded-xl bg-cyan-500/10 px-3 py-2">
+                          Employee
                         </div>
-                      ) : (
-                        <p className="mt-2 text-xs text-white/40">
-                          No matching workflow found for this claim.
-                        </p>
-                      )}
+
+                        <span>→</span>
+
+                        <div className="rounded-xl bg-white/5 px-3 py-2">
+                          Reporting Manager
+                        </div>
+
+                        <span>→</span>
+
+                        <div className="rounded-xl bg-white/5 px-3 py-2">
+                          Department Head
+                        </div>
+
+                        <span>→</span>
+
+                        <div className="rounded-xl bg-white/5 px-3 py-2">
+                          Finance
+                        </div>
+
+                        <span>→</span>
+
+                        <div className="rounded-xl bg-green-500/10 px-3 py-2">
+                          Payment
+                        </div>
+
+                      </div>
                     </div>
 
                   </div>
@@ -1045,14 +1112,45 @@ export default function NewClaimPage() {
                       onClick={async () => {
                         try {
                           setSaving(true);
-                          const totalAmount = formData.expenseItems.reduce(
-                            (sum: number, item: any) => sum + Number(item.amount || 0),
-                            0
-                          );
+                          const submitTotal =
+                            formData.expenseItems.reduce(
+                              (sum: number, item: any) =>
+                                sum + Number(item.amount || 0),
+                              0
+                            );
+
+                          const existingAttsSubmit = uploadedFileMeta
+                            .filter((m: any) => m.isExisting)
+                            .map((m: any) => ({ file_name: m.original_name, file_path: m.storage_path }));
+
                           const payload = {
-                            reimbursement_type_id:
-                              "3d258f63-1532-4f30-b3e4-4d1331006b0e",
-                            requested_amount: totalAmount,
+                            requested_amount: submitTotal,
+                            claim_date: formData.claimDate,
+                            remarks: formData.remarks,
+                            expense_items: formData.expenseItems.map(
+                              (item: any) => ({
+                                expense_date: item.expenseDate,
+                                claim_type: item.claimType,
+                                purpose: item.purpose,
+                                mode: item.mode,
+                                project: item.project,
+                                from_location: item.from,
+                                to_location: item.to,
+                                amount: Number(item.amount),
+                              })
+                            ),
+                            attachment_ids: uploadedFileIds,
+                            existing_attachment_paths: existingAttsSubmit,
+                          };
+                          const draftTotal = formData.expenseItems.reduce(
+                            (sum: number, item: any) => sum + Number(item.amount || 0), 0
+                          );
+                          const existingAtts = uploadedFileMeta
+                            .filter((m: any) => m.isExisting)
+                            .map((m: any) => ({ file_name: m.original_name, file_path: m.storage_path }));
+
+                          const draftPayload = {
+                            requested_amount: draftTotal,
                             claim_date: formData.claimDate,
                             remarks: formData.remarks,
                             expense_items: formData.expenseItems.map((item: any) => ({
@@ -1066,20 +1164,18 @@ export default function NewClaimPage() {
                               amount: Number(item.amount),
                             })),
                             attachment_ids: uploadedFileIds,
+                            existing_attachment_paths: existingAtts,
                           };
-                          const draft = await reimbursementService.createApplication(payload);
-                          toast.success(
-                            `Draft saved! Application No: ${draft.application_no}`,
-                            {
-                              duration: 8000,
-                              action: {
-                                label: "Go to Claims List",
-                                onClick: () => {
-                                  window.location.href = "/claims";
-                                },
-                              },
-                            }
-                          );
+                          console.log("DRAFT PAYLOAD =>", JSON.stringify(draftPayload));
+                          console.log("APPLICATION ID =>", applicationId);
+                          await reimbursementService.updateApplication(applicationId, draftPayload);
+                          toast.success("Draft saved successfully.", {
+                            duration: 8000,
+                            action: {
+                              label: "Go to Claims List",
+                              onClick: () => { router.push("/claims"); },
+                            },
+                          });
                         } catch (error: any) {
                           toast.error(
                             error?.response?.data?.detail ?? "Failed to save draft."
@@ -1111,19 +1207,6 @@ export default function NewClaimPage() {
                             if (!validateClaimDetails(formData)) return;
                           }
 
-                          if (step === 2) {
-                            try {
-                              const totalAmount = formData.expenseItems.reduce(
-                                (sum: number, item: any) => sum + Number(item.amount || 0), 0
-                              );
-                              const expenseTypeIds = [...new Set(formData.expenseItems.map((i: any) => i.claimType).filter(Boolean))];
-                              const wf = await workflowService.getMatchingWorkflow(totalAmount, expenseTypeIds as string[]);
-                              setMatchedWorkflow(wf);
-                            } catch {
-                              setMatchedWorkflow(null);
-                            }
-                          }
-
                           setStep(step + 1);
 
                           return;
@@ -1133,82 +1216,41 @@ export default function NewClaimPage() {
 
                           setSaving(true);
 
-                          const firstExpense =
-                            formData.expenseItems[0];
-
                           const totalAmount =
                             formData.expenseItems.reduce(
                               (sum: number, item: any) =>
-                                sum +
-                                Number(item.amount || 0),
+                                sum + Number(item.amount || 0),
                               0
                             );
 
-                            const payload = {
-                              reimbursement_type_id:
-                                "3d258f63-1532-4f30-b3e4-4d1331006b0e",
+                          const payload = {
+                            requested_amount: totalAmount,
+                            claim_date: formData.claimDate,
+                            remarks: formData.remarks,
+                            expense_items: formData.expenseItems.map(
+                              (item: any) => ({
+                                expense_date: item.expenseDate,
+                                claim_type: item.claimType,
+                                purpose: item.purpose,
+                                mode: item.mode,
+                                project: item.project,
+                                from_location: item.from,
+                                to_location: item.to,
+                                amount: Number(item.amount),
+                              })
+                            ),
+                            attachment_ids: uploadedFileIds,
+                          };
 
-                              requested_amount:
-                                totalAmount,
-
-                              claim_date:
-                                formData.claimDate,
-
-                              remarks:
-                                formData.remarks,
-
-                              expense_items:
-                                formData.expenseItems.map(
-                                  (item: any) => ({
-                                    expense_date:
-                                      item.expenseDate,
-
-                                    claim_type:
-                                      item.claimType,
-
-                                    purpose:
-                                      item.purpose,
-
-                                    mode:
-                                      item.mode,
-
-                                    project:
-                                      item.project,
-
-                                    from_location:
-                                      item.from,
-
-                                    to_location:
-                                      item.to,
-
-                                    amount:
-                                      Number(item.amount),
-                                  })
-                                ),
-
-                              attachment_ids:
-                                uploadedFileIds,
-                            };
-
-                            console.log(
-                              "CREATE PAYLOAD =>",
-                              payload
-                            );
-
-                          const application =
-                            await reimbursementService.createApplication(
-                              payload
-                            );
-
-                          await reimbursementService.submitApplication(
-                            application.id
+                          const updated = await reimbursementService.updateApplication(
+                            applicationId,
+                            payload
                           );
 
-                          setApplicationNo(
-                            application.application_no
-                          );
+                          await reimbursementService.submitApplication(applicationId);
 
-                          setSubmitted(true);
+                          toast.success("Claim submitted successfully.");
+                          router.push("/claims");
 
                         } catch (error: any) {
 
@@ -1237,7 +1279,7 @@ export default function NewClaimPage() {
                     text-black
                     "
                     >
-                      {step === TOTAL_STEPS ? "Submit Claim" : "Next Step"}
+                      {step === TOTAL_STEPS ? "Update Claim" : "Next Step"}
                     </button>
 
 

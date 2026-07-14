@@ -801,7 +801,7 @@ export default function DashboardPage() {
                                 </p>
 
                                 <p className="mt-1 text-xs text-white/40">
-                                  Employee ID: {item.employee_id}
+                                  {item.employee_name || item.employee_id}
                                 </p>
 
                               </div>
