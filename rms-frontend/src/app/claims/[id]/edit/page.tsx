@@ -36,6 +36,7 @@ import EmployeeInfoCard from "@/components/claims/EmployeeInfoCard";
 import ClaimDetailsStep, { validateClaimDetails } from "@/components/claims/ClaimDetailsStep";
 import PermissionGuard from "@/components/auth/permission-guard";
 import { toast } from "sonner";
+import { workflowService } from "@/services/workflow.service";
 
 export default function EditClaimPage() {
   const params = useParams();
@@ -61,6 +62,7 @@ export default function EditClaimPage() {
     useState(false);
 
   const [loadingClaim, setLoadingClaim] = useState(true);
+  const [matchedWorkflow, setMatchedWorkflow] = useState<any>(null);
 
   const [expenseTypes, setExpenseTypes] =
     useState<any[]>([]);
@@ -1038,37 +1040,40 @@ export default function EditClaimPage() {
                         Approval Workflow
                       </h3>
 
-                      <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-
-                        <div className="rounded-xl bg-cyan-500/10 px-3 py-2">
-                          Employee
+                      {matchedWorkflow ? (
+                        <div>
+                          <p className="mt-1 text-xs text-white/50 mb-3">{matchedWorkflow.name}</p>
+                          <div className="flex flex-wrap items-center gap-2 text-sm">
+                            <div className="rounded-xl bg-cyan-500/10 px-3 py-2 text-xs">
+                              Applicant
+                            </div>
+                            {matchedWorkflow.stages?.map((stage: any, idx: number) => (
+                              <div key={idx} className="flex items-center gap-2">
+                                <span className="text-white/40">→</span>
+                                <div className={`rounded-xl px-3 py-2 text-xs ${
+                                  stage.action_type === "Payment Processing"
+                                    ? "bg-green-500/10 text-green-300"
+                                    : stage.action_type === "Amount Verification"
+                                    ? "bg-yellow-500/10 text-yellow-300"
+                                    : "bg-white/5 text-white"
+                                }`}>
+                                  <div>{stage.stage_name || `Stage ${stage.step_order}`}</div>
+                                  {stage.approver_label && (
+                                    <div className="text-[10px] text-white/40 mt-0.5">{stage.approver_label}</div>
+                                  )}
+                                  {stage.min_approver_count && (
+                                    <div className="text-[10px] text-white/40">Min. Approver: {stage.min_approver_count}</div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-
-                        <span>→</span>
-
-                        <div className="rounded-xl bg-white/5 px-3 py-2">
-                          Reporting Manager
-                        </div>
-
-                        <span>→</span>
-
-                        <div className="rounded-xl bg-white/5 px-3 py-2">
-                          Department Head
-                        </div>
-
-                        <span>→</span>
-
-                        <div className="rounded-xl bg-white/5 px-3 py-2">
-                          Finance
-                        </div>
-
-                        <span>→</span>
-
-                        <div className="rounded-xl bg-green-500/10 px-3 py-2">
-                          Payment
-                        </div>
-
-                      </div>
+                      ) : (
+                        <p className="mt-2 text-xs text-white/40">
+                          No matching workflow found for this claim.
+                        </p>
+                      )}
                     </div>
 
                   </div>
@@ -1122,6 +1127,8 @@ export default function EditClaimPage() {
                           const existingAttsSubmit = uploadedFileMeta
                             .filter((m: any) => m.isExisting)
                             .map((m: any) => ({ file_name: m.original_name, file_path: m.storage_path }));
+                          console.log("EXISTING ATTS SUBMIT =>", JSON.stringify(existingAttsSubmit));
+                          console.log("UPLOADED FILE META =>", JSON.stringify(uploadedFileMeta));
 
                           const payload = {
                             requested_amount: submitTotal,
@@ -1205,6 +1212,19 @@ export default function EditClaimPage() {
 
                           if (step === 1) {
                             if (!validateClaimDetails(formData)) return;
+                          }
+
+                          if (step === 2) {
+                            try {
+                              const totalAmount = formData.expenseItems.reduce(
+                                (sum: number, item: any) => sum + Number(item.amount || 0), 0
+                              );
+                              const expenseTypeIds = [...new Set(formData.expenseItems.map((i: any) => i.claimType).filter(Boolean))];
+                              const wf = await workflowService.getMatchingWorkflow(totalAmount, expenseTypeIds as string[]);
+                              setMatchedWorkflow(wf);
+                            } catch {
+                              setMatchedWorkflow(null);
+                            }
                           }
 
                           setStep(step + 1);

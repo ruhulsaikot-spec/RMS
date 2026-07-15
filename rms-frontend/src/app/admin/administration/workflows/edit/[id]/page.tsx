@@ -1468,9 +1468,14 @@ useEffect(() => {
                                         stages.map((s) =>
                                           s.id === stage.id
                                             ? {
-                                                ...s,
-                                                actionType: action,
-                                              }
+                                      ...s,
+                                      actionType: action,
+                                      allowedActions: action === "Amount Verification"
+                                        ? ["VERIFY", "BACK_TO_PREVIOUS_STAGE", "RETURN_TO_APPLICANT", "FINAL_REJECT"]
+                                        : action === "Payment Processing"
+                                        ? ["PAY", "BACK_TO_PREVIOUS_STAGE", "RETURN_TO_APPLICANT", "FINAL_REJECT"]
+                                        : ["APPROVE", "BACK_TO_PREVIOUS_STAGE", "RETURN_TO_APPLICANT", "FINAL_REJECT"],
+                                    }
                                             : s
                                         )
                                       )
@@ -1543,6 +1548,12 @@ useEffect(() => {
                               {
                                 value: "APPROVE",
                                 label: "Approve",
+                                disabled: false,
+                              },
+
+                              {
+                                value: "VERIFY",
+                                label: "Verify Amount",
                                 disabled: false,
                               },
 
@@ -2040,6 +2051,7 @@ useEffect(() => {
                               "APPROVE",
                               "BACK_TO_PREVIOUS_STAGE",
                               "RETURN_TO_APPLICANT",
+                              "FINAL_REJECT",
                             ],
 
                             remarksRequired: {

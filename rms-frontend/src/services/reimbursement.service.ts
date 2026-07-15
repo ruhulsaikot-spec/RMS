@@ -66,6 +66,14 @@ export const reimbursementService = {
     return response.data;
   },
 
+  async getMyActions() {
+    const response =
+      await apiClient.get(
+        "/reimbursements/my-actions"
+      );
+    return response.data;
+  },
+
   async getPendingApprovals() {
     const response =
       await apiClient.get(
@@ -90,10 +98,34 @@ export const reimbursementService = {
     return response.data;
   },
 
+  async backToPreviousStage(
+    applicationId: string,
+    remarks: string
+  ) {
+    const response =
+      await apiClient.post(
+        `/reimbursements/${applicationId}/back-to-previous-stage`,
+        { remarks }
+      );
+    return response.data;
+  },
+
+  async returnToApplicant(
+    applicationId: string,
+    remarks: string
+  ) {
+    const response =
+      await apiClient.post(
+        `/reimbursements/${applicationId}/return-to-applicant`,
+        { remarks }
+      );
+    return response.data;
+  },
+
   async rejectApplication(
     applicationId: string,
     remarks: string
-  ) {    
+  ) { 
     const response =
       await apiClient.post(
         `/reimbursements/${applicationId}/reject`,

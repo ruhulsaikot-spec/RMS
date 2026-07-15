@@ -236,12 +236,13 @@ setSelectedExpenseTypeIds([]);
     userSearch: "",
     minApproverCount: "1",
     actionType: "Approval",
-
-    allowedActions: [
-      "APPROVE",
-      "BACK_TO_PREVIOUS_STAGE",
-      "RETURN_TO_APPLICANT",
-    ],
+    
+                            allowedActions: [
+                              "APPROVE",
+                              "BACK_TO_PREVIOUS_STAGE",
+                              "RETURN_TO_APPLICANT",
+                              "FINAL_REJECT",
+                            ],
 
     remarksRequired: {
       APPROVE: false,
@@ -1498,6 +1499,11 @@ setSelectedExpenseTypeIds([]);
                                             ? {
                                                 ...s,
                                                 actionType: action,
+                                                allowedActions: action === "Amount Verification"
+                                                  ? ["VERIFY", "BACK_TO_PREVIOUS_STAGE", "RETURN_TO_APPLICANT", "FINAL_REJECT"]
+                                                  : action === "Payment Processing"
+                                                  ? ["PAY", "BACK_TO_PREVIOUS_STAGE", "RETURN_TO_APPLICANT", "FINAL_REJECT"]
+                                                  : ["APPROVE", "BACK_TO_PREVIOUS_STAGE", "RETURN_TO_APPLICANT", "FINAL_REJECT"],
                                               }
                                             : s
                                         )
@@ -1575,10 +1581,16 @@ setSelectedExpenseTypeIds([]);
                               },
 
                               {
-                                value: "BACK_TO_PREVIOUS_STAGE",
-                                label: "Back To Previous Stage",
-                                disabled: index === 0,
-                              },
+                                  value: "VERIFY",
+                                  label: "Verify Amount",
+                                  disabled: false,
+                                },
+
+                                {
+                                  value: "BACK_TO_PREVIOUS_STAGE",
+                                  label: "Back To Previous Stage",
+                                  disabled: index === 0,
+                                },
 
                               {
                                 value: "RETURN_TO_APPLICANT",

@@ -33,6 +33,26 @@ function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+function formatDateTime(dateStr: string) {
+  if (!dateStr) return "-";
+  return new Date(dateStr).toLocaleString("en-GB", {
+    day: "2-digit", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit", hour12: true,
+  });
+}
+
+function calcDuration(startStr: string, endStr: string) {
+  if (!startStr || !endStr) return null;
+  const diff = new Date(endStr).getTime() - new Date(startStr).getTime();
+  if (diff <= 0) return null;
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  if (days > 0) return `${days}d ${hours}h ${mins}m`;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m`;
+}
+
 export default function ApprovalDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -42,13 +62,34 @@ export default function ApprovalDetailPage() {
   const [selectedAction, setSelectedAction] = useState("");
   const [remarks, setRemarks] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [hasPendingTask, setHasPendingTask] = useState(false);
+  const [pendingActionType, setPendingActionType] = useState<string | null>(null);
+  const [verifiedAmount, setVerifiedAmount] = useState("");
+  const [adjustmentReason, setAdjustmentReason] = useState("");
   const [expenseTypes, setExpenseTypes] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
 
   useEffect(() => {
     loadClaim();
     loadMasterData();
+    checkPendingTask();
   }, []);
+
+  const checkPendingTask = async () => {
+    try {
+      const data = await reimbursementService.getPendingApprovals();
+      const pending = (data || []).find(
+        (item: any) => item.application_id === params.id
+      );
+      setHasPendingTask(!!pending);
+      setPendingActionType(pending?.action_type || null);
+      if (pending?.action_type === "Amount Verification") {
+        setVerifiedAmount(String(pending.requested_amount || ""));
+      }
+    } catch {
+      setHasPendingTask(false);
+    }
+  };
 
   const loadMasterData = async () => {
     try {
@@ -82,17 +123,30 @@ export default function ApprovalDetailPage() {
 
   const handleAction = async () => {
     if (!selectedAction) return;
+    console.log("SELECTED ACTION =>", selectedAction);
     try {
       setProcessing(true);
-      if (selectedAction === "APPROVE") {
+      if (selectedAction === "VERIFY") {
+        if (!verifiedAmount) {
+          toast.error("Verified amount is required.");
+          setProcessing(false);
+          return;
+        }
+        await reimbursementService.financeReview(claim.id, {
+          verified_amount: Number(verifiedAmount),
+          finance_adjustment_reason: remarks || undefined,
+        });
+      } else if (selectedAction === "APPROVE") {
         await reimbursementService.approveApplication(claim.id, remarks);
       } else if (selectedAction === "REJECT") {
         await reimbursementService.rejectApplication(claim.id, remarks);
+      } else if (selectedAction === "RETURN") {
+        await reimbursementService.returnToApplicant(claim.id, remarks);
+      } else if (selectedAction === "BACK") {
+        await reimbursementService.backToPreviousStage(claim.id, remarks);
       }
       toast.success("Action completed successfully.");
-      loadClaim();
-      setSelectedAction("");
-      setRemarks("");
+      router.push("/approvals");
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || "Action failed.");
     } finally {
@@ -198,8 +252,27 @@ export default function ApprovalDetailPage() {
               {/* Approval Timeline */}
               <div className="col-span-5 rounded-3xl border border-white/20 bg-[#102E67]/80 p-4">
                 <h2 className="mb-4 text-base font-bold text-white">Approval Timeline</h2>
+                {(() => {
+                  const stages = claim.approval_history || [];
+                  const startDate = claim.created_at;
+                  const lastStage = [...stages].reverse().find((s: any) => s.action_date && ["APPROVED", "REJECTED", "PAID"].includes(s.action?.toUpperCase()));
+                  const duration = lastStage ? calcDuration(startDate, lastStage.action_date) : null;
+                  if (!duration) return null;
+                  const isRejected = lastStage?.action?.toUpperCase() === "REJECTED";
+                  const isCompleted = lastStage?.action?.toUpperCase() === "PAID";
+                  return (
+                    <div className={`mb-4 rounded-xl border px-3 py-2 text-xs flex items-center justify-between ${
+                      isRejected ? "border-red-400/20 bg-red-500/10 text-red-300" :
+                      isCompleted ? "border-green-400/20 bg-green-500/10 text-green-300" :
+                      "border-cyan-400/20 bg-cyan-500/10 text-cyan-300"
+                    }`}>
+                      <span>Submit → {isRejected ? "Reject" : isCompleted ? "Payment" : lastStage?.action}</span>
+                      <span className="font-semibold">{duration}</span>
+                    </div>
+                  );
+                })()}
                 {claim.approval_history?.length > 0 ? (
-                  <div className="relative">
+                  <div className="relative max-h-[320px] overflow-y-auto pr-1">
                     <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-white/10" />
                     <div className="space-y-4">
                       {claim.approval_history.map((stage: any, idx: number) => (
@@ -207,19 +280,23 @@ export default function ApprovalDetailPage() {
                           <div className={`absolute left-2.5 top-1 h-3 w-3 rounded-full border-2 ${
                             stage.action === "APPROVED" ? "border-green-400 bg-green-400" :
                             stage.action === "REJECTED" ? "border-red-400 bg-red-400" :
-                            stage.action === "PENDING" ? "border-cyan-400 bg-cyan-400/30" :
+                            stage.action === "PENDING" ? "border-cyan-400 bg-cyan-400/20" :
                             "border-white/30 bg-white/10"
                           }`} />
                           <div className="flex-1 rounded-xl border border-white/10 bg-white/5 p-3">
                             <div className="flex items-center justify-between">
                               <span className="text-xs font-semibold text-white">{stage.stage_name}</span>
-                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${getStatusClass(stage.action)}`}>
-                                {formatStatus(stage.action)}
+                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${getStatusClass(stage.action === "PENDING" ? "SUBMITTED" : stage.action)}`}>
+                                {stage.action === "PENDING" ? "Submitted" : formatStatus(stage.action)}
                               </span>
                             </div>
-                            <div className="mt-1.5 text-xs text-white/50">
+                            <div className="mt-1.5 flex items-center gap-2 text-xs text-white/50">
                               {stage.user_name && <span>{stage.user_name}</span>}
-                              {stage.action_date && <span className="ml-2">{formatDate(stage.action_date)}</span>}
+                              {stage.action_date
+                                ? <span>{formatDateTime(stage.action_date)}</span>
+                                : claim.created_at && stage.action === "PENDING"
+                                ? <span>{formatDateTime(claim.created_at)}</span>
+                                : null}
                             </div>
                             {stage.comments && (
                               <div className="mt-1.5 rounded-lg bg-white/5 px-2 py-1 text-xs text-white/60">
@@ -239,7 +316,32 @@ export default function ApprovalDetailPage() {
               {/* Workflow Action */}
               <div className="col-span-3 rounded-3xl border border-white/20 bg-[#102E67]/80 p-4">
                 <h2 className="mb-4 text-base font-bold text-white">Workflow Action</h2>
+                {!hasPendingTask ? (
+                  <div className="flex h-32 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-xs text-white/40">
+                    No pending action required
+                  </div>
+                ) : (
                 <div className="space-y-3">
+                  {pendingActionType === "Amount Verification" && (
+                    <>
+                      <div>
+                        <label className="text-xs text-white/60">Requested Amount</label>
+                        <div className="mt-1 h-10 rounded-xl border border-white/10 bg-white/5 px-3 flex items-center text-xs text-cyan-300 font-semibold">
+                          ৳ {Number(claim.requested_amount || 0).toLocaleString()}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs text-white/60">Verified Amount <span className="text-red-400">*</span></label>
+                        <input
+                          type="number"
+                          value={verifiedAmount}
+                          onChange={(e) => setVerifiedAmount(e.target.value)}
+                          className="mt-1 w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs text-white"
+                          placeholder="Enter verified amount"
+                        />
+                      </div>                      
+                    </>
+                  )}
                   <div>
                     <label className="text-xs text-white/60">Select Action</label>
                     <select
@@ -249,7 +351,7 @@ export default function ApprovalDetailPage() {
                     >
                       <option value="" className="bg-[#17386E]">Select Action</option>
                       {claim.workflow_actions
-                        ?.filter((action: any) => ["APPROVE", "REJECT", "BACK", "RETURN"].includes(action.action_code))
+                        ?.filter((action: any) => ["APPROVE", "REJECT", "BACK", "RETURN", "VERIFY"].includes(action.action_code))
                         .map((action: any) => (
                           <option key={action.action_code} value={action.action_code} className="bg-[#17386E]">
                             {action.action_name}
@@ -283,6 +385,7 @@ export default function ApprovalDetailPage() {
                     {processing ? "Processing..." : selectedAction ? `Confirm ${formatStatus(selectedAction)}` : "Select an Action"}
                   </button>
                 </div>
+                )}
               </div>
 
             </div>

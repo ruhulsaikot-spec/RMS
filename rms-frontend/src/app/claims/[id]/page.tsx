@@ -39,11 +39,27 @@ function formatStatus(status: string) {
 
 function formatDate(dateStr: string) {
   if (!dateStr) return "-";
-  return new Date(dateStr).toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
+  return new Date(dateStr).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function formatDateTime(dateStr: string) {
+  if (!dateStr) return "-";
+  return new Date(dateStr).toLocaleString("en-GB", {
+    day: "2-digit", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit", hour12: true,
   });
+}
+
+function calcDuration(startStr: string, endStr: string) {
+  if (!startStr || !endStr) return null;
+  const diff = new Date(endStr).getTime() - new Date(startStr).getTime();
+  if (diff <= 0) return null;
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  if (days > 0) return `${days}d ${hours}h ${mins}m`;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m`;
 }
 
 export default function ClaimDetailsPage() {
@@ -210,12 +226,29 @@ export default function ClaimDetailsPage() {
               {/* Approval Workflow Timeline */}
               <div className="col-span-7 rounded-3xl border border-white/20 bg-[#102E67]/80 p-4">
                 <h2 className="mb-4 text-base font-bold text-white">Approval Workflow</h2>
+                {(() => {
+                  const stages = claim.approval_history || [];
+                  const startDate = claim.created_at;
+                  const lastStage = [...stages].reverse().find((s: any) => s.action_date && ["APPROVED", "REJECTED", "PAID"].includes(s.action?.toUpperCase()));
+                  const duration = lastStage ? calcDuration(startDate, lastStage.action_date) : null;
+                  if (!duration) return null;
+                  const isCompleted = lastStage?.action?.toUpperCase() === "PAID";
+                  const isRejected = lastStage?.action?.toUpperCase() === "REJECTED";
+                  return (
+                    <div className={`mb-4 rounded-xl border px-3 py-2 text-xs flex items-center justify-between ${
+                      isRejected ? "border-red-400/20 bg-red-500/10 text-red-300" :
+                      isCompleted ? "border-green-400/20 bg-green-500/10 text-green-300" :
+                      "border-cyan-400/20 bg-cyan-500/10 text-cyan-300"
+                    }`}>
+                      <span>Submit → {isRejected ? "Reject" : isCompleted ? "Payment" : lastStage?.action}</span>
+                      <span className="font-semibold">{duration}</span>
+                    </div>
+                  );
+                })()}
 
                 {workflowStages.length > 0 ? (
-                  <div className="relative">
-                    {/* Timeline line */}
+                  <div className="relative max-h-[320px] overflow-y-auto pr-1">
                     <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-white/10" />
-
                     <div className="space-y-4">
                       {workflowStages.map((stage: any, index: number) => {
                         const isApproved = stage.action === "APPROVED";
@@ -251,7 +284,7 @@ export default function ClaimDetailsPage() {
                                 </div>
                                 <div>
                                   <span className="text-white/50">Date: </span>
-                                  <span className="text-white">{stage.action_date ? formatDate(stage.action_date) : "-"}</span>
+                                  <span className="text-white">{stage.action_date ? formatDateTime(stage.action_date) : "-"}</span>
                                 </div>
                               </div>
 
