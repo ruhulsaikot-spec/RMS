@@ -439,36 +439,64 @@ class ReimbursementService:
                     "file_size": "",
                 }
             )
-        workflow_actions = [
-            {"action_code": "APPROVE", "action_name": "Approve"},
-            {"action_code": "REJECT", "action_name": "Reject"},
-            {"action_code": "BACK", "action_name": "Back To Previous Stage"},
-            {"action_code": "RETURN", "action_name": "Back To Applicant"},
-            {"action_code": "VERIFY", "action_name": "Verification"},
-            {"action_code": "PAY", "action_name": "Payment"},
-        ]
+        action_name_map = {
+            "APPROVE": "Approve",
+            "REJECT": "Reject",
+            "FINAL_REJECT": "Reject",
+            "BACK_TO_PREVIOUS_STAGE": "Back To Previous Stage",
+            "RETURN_TO_APPLICANT": "Back To Applicant",
+            "VERIFY": "Verify Amount",
+            "PAY": "Payment",
+        }
+
+        action_code_map = {
+            "APPROVE": "APPROVE",
+            "REJECT": "REJECT",
+            "FINAL_REJECT": "REJECT",
+            "BACK_TO_PREVIOUS_STAGE": "BACK",
+            "RETURN_TO_APPLICANT": "RETURN",
+            "VERIFY": "VERIFY",
+            "PAY": "PAY",
+        }
+
+        # Get allowed actions from current pending approval step
+        from sqlalchemy import select as sa_select_wa
+        from app.modules.reimbursement.models.reimbursement import ReimbursementApproval as RA
+        pending_result = await db.execute(
+            sa_select_wa(RA)
+            .options(
+                __import__('sqlalchemy.orm', fromlist=['selectinload']).selectinload(RA.workflow_step)
+            )
+            .where(
+                RA.application_id == application_id,
+                RA.action == "PENDING",
+            )
+        )
+        pending = pending_result.scalar_one_or_none()
+
+        if pending and pending.workflow_step and pending.workflow_step.allowed_actions:
+            allowed = pending.workflow_step.allowed_actions
+            workflow_actions = [
+                {
+                    "action_code": action_code_map.get(a, a),
+                    "action_name": action_name_map.get(a, a),
+                }
+                for a in allowed
+                if a in action_name_map
+            ]
+
+        else:
+            workflow_actions = []
 
         approval_history = []
-        for item in application.approvals:
+        for log in (application.activity_logs or []):
             approval_history.append(
                 {
-                    "stage_name": (
-                        f"Step {item.workflow_step.step_order}"
-                        if item.workflow_step
-                        else "-"
-                    ),
-                    "action": item.action,
-                    "user_name": (
-                        application.data.full_name
-                        if application.data
-                        else "-"
-                    ),
-                    "comments": item.remarks,
-                    "action_date": (
-                        str(item.action_at)
-                        if item.action_at
-                        else ""
-                    ),
+                    "stage_name": log.action,
+                    "action": log.action,
+                    "user_name": log.actor_name or "-",
+                    "comments": log.remarks,
+                    "action_date": log.action_at.isoformat() if log.action_at else "",
                 }
             )
 
@@ -603,31 +631,34 @@ class ReimbursementService:
             )
         )
 
-        await db.execute(
-            sa_delete(ReimbursementAttachment).where(
-                ReimbursementAttachment.application_id == application_id
+        if payload.existing_attachment_paths or payload.attachment_ids:
+            await db.execute(
+                sa_delete(ReimbursementAttachment).where(
+                    ReimbursementAttachment.application_id == application_id
+                )
             )
-        )
 
-        # Re-add existing attachments that were not deleted
-        for existing_att in payload.existing_attachment_paths:
-            attachment = ReimbursementAttachment(
-                application_id=application_id,
-                file_name=existing_att.get("file_name", ""),
-                file_path=existing_att.get("file_path", ""),
-            )
-            db.add(attachment)
-
-        # Add new uploaded files
-        for file_id in payload.attachment_ids:
-            uploaded_file = await db.get(UploadedFile, str(file_id))
-            if uploaded_file:
+        # Only update attachments if there are changes
+        if payload.existing_attachment_paths or payload.attachment_ids:
+            # Re-add existing attachments that were not deleted
+            for existing_att in payload.existing_attachment_paths:
                 attachment = ReimbursementAttachment(
                     application_id=application_id,
-                    file_name=uploaded_file.original_name,
-                    file_path=uploaded_file.storage_path,
+                    file_name=existing_att.get("file_name", ""),
+                    file_path=existing_att.get("file_path", ""),
                 )
                 db.add(attachment)
+
+            # Add new uploaded files
+            for file_id in payload.attachment_ids:
+                uploaded_file = await db.get(UploadedFile, str(file_id))
+                if uploaded_file:
+                    attachment = ReimbursementAttachment(
+                        application_id=application_id,
+                        file_name=uploaded_file.original_name,
+                        file_path=uploaded_file.storage_path,
+                    )
+                    db.add(attachment)
 
         # Add new expense items
         total_amount = 0
@@ -707,11 +738,27 @@ class ReimbursementService:
             first_step,
         )        
 
+        from app.modules.reimbursement.models.reimbursement import ReimbursementActivityLog
+        from app.modules.user.models.user import User
+        from sqlalchemy import select as sa_select
+        submitter_result = await db.execute(sa_select(User).where(User.id == current_user["id"]))
+        submitter = submitter_result.scalar_one_or_none()
+        activity = ReimbursementActivityLog(
+            application_id=application.id,
+            action="SUBMITTED",
+            action_by=current_user["id"],
+            actor_name=submitter.full_name if submitter else None,
+            remarks=None,
+            action_at=datetime.now(UTC),
+        )
+        db.add(activity)
+        await db.commit()
+
         return {
             "message": "Application submitted successfully",
             "application_id": application.id,
             "status": application.status,
-        }    
+        }
 
     @staticmethod
     async def approve_application(
@@ -737,6 +784,11 @@ class ReimbursementService:
             raise ValueError(
                 "You are not authorized to approve this application"
             )
+
+        if pending_approval.workflow_step:
+            remarks_required = pending_approval.workflow_step.remarks_required or {}
+            if remarks_required.get("APPROVE") and not payload.remarks:
+                raise ValueError("Remarks are required for Approve action.")
 
         application = (
             await ReimbursementRepository.get_application_by_id(
@@ -856,6 +908,20 @@ class ReimbursementService:
                 current_step,
             )
 
+        from app.modules.reimbursement.models.reimbursement import ReimbursementActivityLog
+        from app.modules.user.models.user import User as UserModel
+        from sqlalchemy import select as sa_select_app
+        approver_result = await db.execute(sa_select_app(UserModel).where(UserModel.id == current_user["id"]))
+        approver = approver_result.scalar_one_or_none()
+        db.add(ReimbursementActivityLog(
+            application_id=application_id,
+            action="APPROVED",
+            action_by=current_user["id"],
+            actor_name=approver.full_name if approver else None,
+            remarks=payload.remarks,
+            action_at=datetime.now(UTC),
+        ))
+        await db.commit()
         return {
             "message": "Application approved successfully"
         }
@@ -885,6 +951,11 @@ class ReimbursementService:
                 "You are not authorized to reject this application"
             )
 
+        if pending_approval.workflow_step:
+            remarks_required = pending_approval.workflow_step.remarks_required or {}
+            if remarks_required.get("FINAL_REJECT") and not payload.remarks:
+                raise ValueError("Remarks are required for Reject action.")
+
         pending_approval.action = "REJECTED"
 
         pending_approval.approved_by = current_user["id"]
@@ -908,14 +979,162 @@ class ReimbursementService:
         )
 
         application.status = "REJECTED"
+        await ReimbursementRepository.update_application(
+            db,
+            application,
+        )
+        from app.modules.reimbursement.models.reimbursement import ReimbursementActivityLog
+        from app.modules.user.models.user import User as UserModel
+        from sqlalchemy import select as sa_select_rej
+        rejecter_result = await db.execute(sa_select_rej(UserModel).where(UserModel.id == current_user["id"]))
+        rejecter = rejecter_result.scalar_one_or_none()
+        db.add(ReimbursementActivityLog(
+            application_id=application_id,
+            action="REJECTED",
+            action_by=current_user["id"],
+            actor_name=rejecter.full_name if rejecter else None,
+            remarks=payload.remarks,
+            action_at=datetime.now(UTC),
+        ))
+        await db.commit()
+        return {
+            "message": "Application rejected successfully"
+        }
+    @staticmethod
+    async def back_to_previous_stage(
+        db: AsyncSession,
+        application_id: str,
+        payload: ApprovalActionRequest,
+        current_user: dict,
+    ):
+        pending_approval = (
+            await ReimbursementRepository.get_pending_approval(
+                db,
+                application_id,
+                current_user["id"],
+            )
+        )
+        if not pending_approval:
+            raise ValueError("No pending approval found")
 
+        if pending_approval.action_by != current_user["id"]:
+            raise ValueError("You are not authorized to perform this action")
+
+        if pending_approval.workflow_step:
+            remarks_required = pending_approval.workflow_step.remarks_required or {}
+            if remarks_required.get("BACK_TO_PREVIOUS_STAGE") and not payload.remarks:
+                raise ValueError("Remarks are required for Back To Previous Stage action.")
+
+        current_step_order = pending_approval.workflow_step.step_order if pending_approval.workflow_step else 1
+
+        # Mark current approval as BACKED
+        pending_approval.action = "BACKED"
+        pending_approval.approved_by = current_user["id"]
+        pending_approval.action_at = datetime.now(UTC)
+        pending_approval.remarks = payload.remarks
+        await ReimbursementRepository.update_approval(db, pending_approval)
+
+        # Activity log
+        from app.modules.reimbursement.models.reimbursement import ReimbursementActivityLog
+        from app.modules.user.models.user import User as UserModel
+        from sqlalchemy import select as sa_select_back
+        backer_result = await db.execute(sa_select_back(UserModel).where(UserModel.id == current_user["id"]))
+        backer = backer_result.scalar_one_or_none()
+        db.add(ReimbursementActivityLog(
+            application_id=application_id,
+            action="BACKED",
+            action_by=current_user["id"],
+            actor_name=backer.full_name if backer else None,
+            remarks=payload.remarks,
+            action_at=datetime.now(UTC),
+        ))
+
+        # Find previous step
+        if current_step_order > 1:
+            from app.modules.workflow.repositories.workflow_repository import WorkflowRepository
+            application = await ReimbursementRepository.get_application_by_id(db, application_id)
+            prev_steps = await WorkflowRepository.get_workflow_steps_by_workflow_id(db, application.workflow_definition_id)
+            prev_step = next((s for s in prev_steps if s.step_order == current_step_order - 1), None)
+
+            if prev_step:
+                # Create new pending approval for previous step
+                await WorkflowEngine.create_pending_approval(
+                    db=db,
+                    application=application,
+                    workflow_step=prev_step,
+                )
+                application.status = "IN_APPROVAL"
+                await ReimbursementRepository.update_application(db, application)
+        await db.commit()
+
+        return {"message": "Application sent back to previous stage"}
+
+    @staticmethod
+    async def return_to_applicant(
+        db: AsyncSession,
+        application_id: str,
+        payload: ApprovalActionRequest,
+        current_user: dict,
+    ):
+        pending_approval = (
+            await ReimbursementRepository.get_pending_approval(
+                db,
+                application_id,
+                current_user["id"],
+            )
+        )
+        if not pending_approval:
+            raise ValueError("No pending approval found")
+
+        if pending_approval.action_by != current_user["id"]:
+            raise ValueError("You are not authorized to perform this action")
+
+        if pending_approval.workflow_step:
+            remarks_required = pending_approval.workflow_step.remarks_required or {}
+            if remarks_required.get("RETURN_TO_APPLICANT") and not payload.remarks:
+                raise ValueError("Remarks are required for Return To Applicant action.")
+
+        pending_approval.action = "RETURNED"
+        pending_approval.approved_by = current_user["id"]
+        pending_approval.action_at = datetime.now(UTC)
+        pending_approval.remarks = payload.remarks
+
+        await ReimbursementRepository.update_approval(
+            db,
+            pending_approval,
+        )
+
+        application = (
+            await ReimbursementRepository.get_application_by_id(
+                db,
+                application_id,
+            )
+        )
+
+        application.status = "DRAFT"
         await ReimbursementRepository.update_application(
             db,
             application,
         )
 
+        from app.modules.reimbursement.models.reimbursement import ReimbursementActivityLog
+        from app.modules.user.models.user import User
+        from sqlalchemy import select as sa_select
+        returner_result = await db.execute(sa_select(User).where(User.id == current_user["id"]))
+        returner = returner_result.scalar_one_or_none()
+        activity = ReimbursementActivityLog(
+            application_id=application_id,
+            action="RETURNED",
+            action_by=current_user["id"],
+            actor_name=returner.full_name if returner else None,
+            remarks=payload.remarks,
+            action_at=datetime.now(UTC),
+        )
+        db.add(activity)
+        await db.commit()
+
         return {
-            "message": "Application rejected successfully"
+            "message": "Application returned to applicant successfully"
         }
 
     @staticmethod
@@ -962,9 +1181,9 @@ class ReimbursementService:
             )
         )
 
-        if not current_step.is_finance_step:
+        if current_step.action_type != "Amount Verification":
             raise ValueError(
-                "Finance review is only allowed during finance workflow step"
+                "Finance review is only allowed during Amount Verification step"
             )
 
         if application.employee_id == current_user["id"]:
@@ -1273,6 +1492,59 @@ class ReimbursementService:
         }
 
     @staticmethod
+    async def get_my_actions(
+        db: AsyncSession,
+        user_id: str,
+    ):
+        from sqlalchemy import select as sa_select
+        from app.modules.reimbursement.models.reimbursement import ReimbursementActivityLog
+        from app.modules.reimbursement.models.reimbursement import ReimbursementApplication
+
+        result = await db.execute(
+            sa_select(ReimbursementActivityLog)
+            .where(
+                ReimbursementActivityLog.action_by == user_id,
+                ReimbursementActivityLog.action.in_(["APPROVED", "REJECTED", "RETURNED", "BACKED"]),
+            )
+            .order_by(ReimbursementActivityLog.action_at.desc())
+        )
+        logs = result.scalars().all()
+
+        # Keep only latest action per application
+        seen_apps = set()
+        unique_logs = []
+        for log in logs:
+            if log.application_id not in seen_apps:
+                seen_apps.add(log.application_id)
+                unique_logs.append(log)
+        logs = unique_logs
+
+        response = []
+        for log in logs:
+            app_result = await db.execute(
+                sa_select(ReimbursementApplication)
+                .options(
+                    __import__('sqlalchemy.orm', fromlist=['selectinload']).selectinload(
+                        ReimbursementApplication.employee
+                    )
+                )
+                .where(ReimbursementApplication.id == log.application_id)
+            )
+            application = app_result.scalar_one_or_none()
+            if application:
+                response.append({
+                    "application_id": application.id,
+                    "application_no": application.application_no,
+                    "employee_name": application.employee.full_name if application.employee else None,
+                    "requested_amount": float(application.requested_amount or 0),
+                    "status": application.status,
+                    "action": log.action,
+                    "remarks": log.remarks,
+                    "action_date": log.action_at.isoformat() if log.action_at else None,
+                })
+        return response
+
+    @staticmethod
     async def get_pending_approvals(
         db: AsyncSession,
         user_id: str,
@@ -1301,6 +1573,7 @@ class ReimbursementService:
                     ),
                     "status": application.status,
                     "created_at": application.created_at.isoformat() if application.created_at else None,
+                    "action_type": approval.workflow_step.action_type if approval.workflow_step else None,
                 }
             )
             

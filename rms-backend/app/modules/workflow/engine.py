@@ -73,20 +73,11 @@ class WorkflowEngine:
             return step.user_id
 
         elif step.approver_type == "GROUP":
-
-            primary_member = (
-                await WorkflowRepository.get_primary_group_member(
-                    db,
-                    step.approval_group_id,
-                )
-            )
-
-            if not primary_member:
-                raise ValueError(
-                    "Primary approver not configured"
-                )
-
-            return primary_member.user_id
+            from app.modules.workflow.repositories.approval_group_repository import ApprovalGroupRepository
+            members = await ApprovalGroupRepository.get_members_by_group(db, step.approval_group_id)
+            if not members:
+                raise ValueError("No members configured in approval group")
+            return members[0].user_id
 
         raise ValueError(
             f"Unsupported approver type: {step.approver_type}"

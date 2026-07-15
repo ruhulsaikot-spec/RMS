@@ -65,6 +65,9 @@ class ReimbursementRepository:
                 selectinload(
                     ReimbursementApplication.payment_logs
                 ),
+                selectinload(
+                    ReimbursementApplication.activity_logs
+                ),
 
                 selectinload(
                     ReimbursementApplication.employee
@@ -104,12 +107,10 @@ class ReimbursementRepository:
         db: AsyncSession,
         approval,
     ):
-        await db.flush()
-
+        await db.commit()
         await db.refresh(
             approval
         )
-
         return approval
 
     @staticmethod
@@ -151,7 +152,13 @@ class ReimbursementRepository:
         result = await db.execute(
             select(
                 ReimbursementApproval
-            ).where(
+            )
+            .options(
+                selectinload(
+                    ReimbursementApproval.workflow_step
+                )
+            )
+            .where(
                 ReimbursementApproval.application_id == application_id,
                 ReimbursementApproval.action == "PENDING",
                 ReimbursementApproval.action_by == user_id,
@@ -174,7 +181,10 @@ class ReimbursementRepository:
                     ReimbursementApproval.application
                 ).selectinload(
                     ReimbursementApplication.employee
-                )
+                ),
+                selectinload(
+                    ReimbursementApproval.workflow_step
+                ),
             )
             .where(
                 ReimbursementApproval.action_by

@@ -118,6 +118,12 @@ class ReimbursementApplication(BaseModel):
         cascade="all, delete-orphan",
     )
 
+    activity_logs = relationship(
+        "ReimbursementActivityLog",
+        back_populates="application",
+        order_by="ReimbursementActivityLog.action_at",
+    )
+
     payment_logs = relationship(
         "ReimbursementPaymentLog",
         cascade="all, delete-orphan",
@@ -333,6 +339,42 @@ class ReimbursementApproval(BaseModel):
         "WorkflowStep",
     )
 
+
+class ReimbursementActivityLog(BaseModel):
+    __tablename__ = "reimbursement_activity_logs"
+
+    application_id: Mapped[str] = mapped_column(
+        ForeignKey(
+            "reimbursement_applications.id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+    )
+    action: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+    action_by: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+    )
+    actor_name: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+    remarks: Mapped[str | None] = mapped_column(
+        String(1000),
+        nullable=True,
+    )
+    action_at: Mapped[DateTime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    application = relationship(
+        "ReimbursementApplication",
+        back_populates="activity_logs",
+    )
 
 class ReimbursementPaymentLog(BaseModel):
     __tablename__ = "reimbursement_payment_logs"

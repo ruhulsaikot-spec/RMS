@@ -248,6 +248,7 @@ class PendingApprovalResponse(BaseModel):
     
     status: str
     created_at: datetime | None = None
+    action_type: str | None = None
 
     model_config = ConfigDict(
         from_attributes=True,

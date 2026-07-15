@@ -66,6 +66,18 @@ async def get_reimbursement_applications(
     )
 
 @router.get(
+    "/my-actions",
+)
+async def get_my_actions(
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    return await ReimbursementService.get_my_actions(
+        db=db,
+        user_id=current_user["id"],
+    )
+
+@router.get(
     "/pending-approvals",
     response_model=list[
         PendingApprovalResponse
@@ -123,6 +135,38 @@ async def update_reimbursement_application(
         application_id=application_id,
         payload=payload,
         employee_id=current_user["id"],
+    )
+
+@router.post(
+    "/{application_id}/back-to-previous-stage",
+)
+async def back_to_previous_stage(
+    application_id: str,
+    payload: ApprovalActionRequest,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    return await ReimbursementService.back_to_previous_stage(
+        db=db,
+        application_id=application_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+@router.post(
+    "/{application_id}/return-to-applicant",
+)
+async def return_to_applicant(
+    application_id: str,
+    payload: ApprovalActionRequest,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    return await ReimbursementService.return_to_applicant(
+        db=db,
+        application_id=application_id,
+        payload=payload,
+        current_user=current_user,
     )
 
 @router.post(
