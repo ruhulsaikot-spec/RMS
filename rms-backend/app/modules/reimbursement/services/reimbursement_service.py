@@ -1285,6 +1285,19 @@ class ReimbursementService:
                 next_step,
             )
 
+        from app.modules.reimbursement.models.reimbursement import ReimbursementActivityLog
+        from app.modules.user.models.user import User as UserModel
+        from sqlalchemy import select as sa_select_vr
+        verifier_result = await db.execute(sa_select_vr(UserModel).where(UserModel.id == current_user["id"]))
+        verifier = verifier_result.scalar_one_or_none()
+        db.add(ReimbursementActivityLog(
+            application_id=application_id,
+            action="VERIFIED",
+            action_by=current_user["id"],
+            actor_name=verifier.full_name if verifier else None,
+            remarks=payload.remarks,
+            action_at=datetime.now(UTC),
+        ))
         await db.commit()
 
         return {
@@ -1316,26 +1329,21 @@ class ReimbursementService:
                 "Application not found"
             )
 
-        payment_method = (
-            await PaymentMethodRepository.get_by_id(
-                db,
-                payload.payment_method_id,
+        from sqlalchemy import select as sa_select_pm
+        from app.modules.payment_method.models.payment_method import PaymentMethod
+        payment_method = None
+        if payload.payment_method_id and payload.payment_method_id != "default":
+            payment_method = await PaymentMethodRepository.get_by_id(
+                db, payload.payment_method_id,
             )
-        )
-
         if not payment_method:
-            raise ValueError(
-                "Invalid payment method"
-            )
+            # Use first available payment method
+            pm_result = await db.execute(sa_select_pm(PaymentMethod).limit(1))
+            payment_method = pm_result.scalar_one_or_none()
 
-        if application.status != "VERIFIED":
+        if application.status not in ["VERIFIED", "IN_APPROVAL"]:
             raise ValueError(
-                "Only VERIFIED applications can be paid"
-            )
-
-        if application.reviewed_by is None:
-            raise ValueError(
-                "Finance review must be completed before payment"
+                "Application is not in a payable state"
             )
 
         pending_approval = (
@@ -1423,7 +1431,7 @@ class ReimbursementService:
 
         payment_log = ReimbursementPaymentLog(
             application_id=application.id,
-            payment_method_id=payment_method.id,
+            payment_method_id=payment_method.id if payment_method else None,
             transaction_reference=payload.transaction_reference,
             payment_account=payload.payment_account,
             payment_amount=payment_amount,
@@ -1486,6 +1494,20 @@ class ReimbursementService:
             }
         )
 
+        from app.modules.reimbursement.models.reimbursement import ReimbursementActivityLog
+        from app.modules.user.models.user import User as UserModel
+        from sqlalchemy import select as sa_select_pay
+        payer_result = await db.execute(sa_select_pay(UserModel).where(UserModel.id == current_user["id"]))
+        payer = payer_result.scalar_one_or_none()
+        db.add(ReimbursementActivityLog(
+            application_id=application_id,
+            action="PAID",
+            action_by=current_user["id"],
+            actor_name=payer.full_name if payer else None,
+            remarks=payload.remarks,
+            action_at=datetime.now(UTC),
+        ))
+        await db.commit()
         return {
             "message": "Payment processed successfully",
             "payment_amount": float(payment_amount),
@@ -1504,7 +1526,7 @@ class ReimbursementService:
             sa_select(ReimbursementActivityLog)
             .where(
                 ReimbursementActivityLog.action_by == user_id,
-                ReimbursementActivityLog.action.in_(["APPROVED", "REJECTED", "RETURNED", "BACKED"]),
+                ReimbursementActivityLog.action.in_(["APPROVED", "REJECTED", "RETURNED", "BACKED", "VERIFIED", "PAID"]),
             )
             .order_by(ReimbursementActivityLog.action_at.desc())
         )

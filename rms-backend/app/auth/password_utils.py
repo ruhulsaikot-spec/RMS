@@ -132,8 +132,7 @@ class PasswordPolicyValidator:
         is_valid, errors = self.validate(password)
         if not is_valid:
             raise ValidationError(
-                message="Password does not meet security policy requirements",
-                errors=[{"field": "password", "message": err} for err in errors],
+                message="Password must be at least 8 characters and include uppercase, lowercase, and special characters.",
             )
 
     @staticmethod

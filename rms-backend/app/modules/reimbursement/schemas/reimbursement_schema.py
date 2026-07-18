@@ -227,10 +227,11 @@ class ApprovalActionRequest(BaseModel):
     remarks: str | None = None
 
 class FinanceReviewRequest(BaseModel):
-
+    
     verified_amount: float
 
     finance_adjustment_reason: str | None = None
+    remarks: str | None = None
 
 class ApprovalActionRequest(BaseModel):
 
@@ -245,7 +246,7 @@ class PendingApprovalResponse(BaseModel):
     employee_id: str
     employee_name: str | None = None
     requested_amount: float
-    
+
     status: str
     created_at: datetime | None = None
     action_type: str | None = None

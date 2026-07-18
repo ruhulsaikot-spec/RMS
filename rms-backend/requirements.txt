@@ -5,6 +5,7 @@
 
 # ── Web Framework ────────────────────────────────────────────
 fastapi==0.115.6
+aiosmtplib>=3.0.0
 uvicorn[standard]==0.34.0
 python-multipart==0.0.20
 

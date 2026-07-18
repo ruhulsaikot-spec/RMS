@@ -88,6 +88,10 @@ class User(BaseModel):
         default=0,
     )
 
+    password_changed_at: Mapped[DateTime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     must_change_password: Mapped[bool] = mapped_column(
         Boolean,
         default=False,

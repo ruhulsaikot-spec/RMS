@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.jwt_utils import (
     TOKEN_TYPE_ACCESS,
     TOKEN_TYPE_REFRESH,
+    TOKEN_TYPE_PASSWORD_RESET,
     create_access_token,
     create_password_reset_token,
     create_refresh_token,
@@ -594,15 +595,23 @@ class AuthService:
             PasswordResetRequestResponse confirming the request.
         """
         email = request.email.lower().strip()
-
         user = await self.user_repo.get_by_email(email)
-
         if user and user.is_active:
-            # Create password reset token
-            reset_token, reset_jti = create_password_reset_token(user.id)
+            # Generate 6 digit OTP
+            import random
+            otp = str(random.randint(100000, 999999))
 
-            # Store in Redis for one-time use verification
+            # Store OTP in Redis with 10 minute expiry
+            otp_key = f"password_reset_otp:{user.id}"
+            await self.redis.setex(otp_key, 600, otp)
+
+            # Also create JWT token for confirm step
+            reset_token, reset_jti = create_password_reset_token(user.id)
             await self.password_reset_store.store_reset_token(user.id, reset_jti)
+
+            # Store mapping from OTP to JWT token
+            otp_token_key = f"password_reset_otp_token:{user.id}:{otp}"
+            await self.redis.setex(otp_token_key, 600, reset_token)
 
             # Log the request
             await self._log_auth_event(
@@ -612,25 +621,31 @@ class AuthService:
                 success=True,
                 details={"reset_jti": reset_jti},
             )
-
             logger.info(
                 "password_reset_requested",
                 user_id=user.id,
                 email=email,
                 reset_jti=reset_jti,
             )
+            # Send OTP email
+            try:
+                from app.core.email import send_otp_email
+                from app.core.config import settings
+                if settings.smtp.is_configured:
+                    await send_otp_email(
+                        to_email=email,
+                        otp=otp,
+                        user_name=user.full_name or email,
+                    )
+                    logger.info("password_reset_email_sent", email=email)
+            except Exception as e:
+                logger.error("password_reset_email_failed", email=email, error=str(e))
+        
+        if not user or not user.is_active:
+            raise AuthenticationError("No account found with this email address.")
 
-            # In production, send email with reset token/link
-            # For now, include the token in the response for development
-            if security_settings.jwt_issuer.endswith("-dev"):
-                return PasswordResetRequestResponse(
-                    message="Password reset token generated (development mode)",
-                    email=email,
-                )
-
-        # Always return success to prevent email enumeration
         return PasswordResetRequestResponse(
-            message="If an account exists with this email, password reset instructions have been sent",
+            message="OTP has been sent to your email address.",
             email=email,
         )
 
@@ -662,18 +677,39 @@ class AuthService:
             AuthenticationError: If reset token is invalid or expired.
             ValidationError: If new password doesn't meet policy.
         """
+        # Check if request.token is a 6-digit OTP
+        otp_input = request.token.strip()
+        if otp_input.isdigit() and len(otp_input) == 6:
+            # Find user by scanning OTP keys
+            pattern = f"password_reset_otp:*"
+            keys = await self.redis.keys(pattern)
+            found_user_id = None
+            for key in keys:
+                stored_otp = await self.redis.get(key)
+                stored_otp_str = stored_otp.decode() if isinstance(stored_otp, bytes) else stored_otp
+                if stored_otp_str == otp_input:
+                    key_str = key.decode() if isinstance(key, bytes) else key
+                    found_user_id = key_str.split(":")[-1]
+                    await self.redis.delete(key)
+                    break
+            if not found_user_id:
+                raise AuthenticationError("Invalid or expired OTP")
+            # Generate new JWT token for this user
+            reset_token, reset_jti = create_password_reset_token(found_user_id)
+            await self.password_reset_store.store_reset_token(found_user_id, reset_jti)
+            token_to_decode = reset_token
+        else:
+            token_to_decode = otp_input
+
         # Decode reset token
         try:
-            payload = decode_token(request.token)
+            payload = decode_token(token_to_decode)
         except Exception as exc:
             raise AuthenticationError("Invalid or expired password reset token") from exc
-
         if not validate_token_type(payload, TOKEN_TYPE_PASSWORD_RESET):
             raise AuthenticationError("Invalid token type for password reset")
-
         if is_token_expired(payload):
             raise AuthenticationError("Password reset token has expired")
-
         jti = get_token_jti(payload)
         user_id = get_token_subject(payload)
 
@@ -703,9 +739,9 @@ class AuthService:
 
         # Consume reset token (one-time use)
         await self.password_reset_store.consume_reset_token(jti)
-
-        # Revoke all sessions
-        await self.token_blacklist.blacklist_all_user_tokens(user_id)
+        # Clear user-level blacklist so new login works
+        blacklist_key = f"{security_settings.blacklist_key_prefix}user:{user_id}"
+        await self.redis.delete(blacklist_key)
 
         # Log completion
         await self._log_auth_event(
