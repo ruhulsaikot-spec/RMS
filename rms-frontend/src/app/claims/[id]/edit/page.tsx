@@ -355,41 +355,33 @@ export default function EditClaimPage() {
 
               {/* Stepper */}
               <div className="mb-5 flex items-center gap-2">
-
-                <div className="flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-500 text-xs font-semibold">
-                    1
+                {[
+                  { num: 1, label: "Claim Information" },
+                  { num: 2, label: "Attachments" },
+                  { num: 3, label: "Review & Submit" },
+                ].map((s, idx) => (
+                  <div key={s.num} className="flex items-center gap-2">
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all ${
+                      step > s.num
+                        ? "bg-green-500 text-white"
+                        : step === s.num
+                        ? "bg-cyan-500 text-black"
+                        : "bg-white/10 text-white/40"
+                    }`}>
+                      {step > s.num ? "✓" : s.num}
+                    </div>
+                    <span className={`text-xs font-medium ${
+                      step === s.num ? "text-cyan-300" :
+                      step > s.num ? "text-white/60" :
+                      "text-white/30"
+                    }`}>
+                      {s.label}
+                    </span>
+                    {idx < 2 && (
+                      <div className={`mx-2 h-px w-10 ${step > s.num ? "bg-green-500/40" : "bg-white/10"}`} />
+                    )}
                   </div>
-
-                  <span className="text-xs font-medium">
-                    Claim Information
-                  </span>
-                </div>
-
-                <div className="h-[1px] flex-1 bg-white/10" />
-
-                <div className="flex items-center gap-2 opacity-50">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/20">
-                    2
-                  </div>
-
-                  <span className="text-xs">
-                    Attachments
-                  </span>
-                </div>
-
-                <div className="h-[1px] flex-1 bg-white/10" />
-
-                <div className="flex items-center gap-2 opacity-50">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/20">
-                    3
-                  </div>
-
-                  <span className="text-xs">
-                    Review & Submit
-                  </span>
-                </div>
-
+                ))}
               </div>
 
               <div className="space-y-5">

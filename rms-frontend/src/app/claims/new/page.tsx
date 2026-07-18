@@ -293,41 +293,33 @@ export default function NewClaimPage() {
 
               {/* Stepper */}
               <div className="mb-5 flex items-center gap-2">
-
-                <div className="flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-500 text-xs font-semibold">
-                    1
+                {[
+                  { num: 1, label: "Claim Information" },
+                  { num: 2, label: "Attachments" },
+                  { num: 3, label: "Review & Submit" },
+                ].map((s, idx) => (
+                  <div key={s.num} className="flex items-center gap-2">
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all ${
+                      step > s.num
+                        ? "bg-green-500 text-white"
+                        : step === s.num
+                        ? "bg-cyan-500 text-black"
+                        : "bg-white/10 text-white/40"
+                    }`}>
+                      {step > s.num ? "✓" : s.num}
+                    </div>
+                    <span className={`text-xs font-medium ${
+                      step === s.num ? "text-cyan-300" :
+                      step > s.num ? "text-white/60" :
+                      "text-white/30"
+                    }`}>
+                      {s.label}
+                    </span>
+                    {idx < 2 && (
+                      <div className={`mx-2 h-px w-10 ${step > s.num ? "bg-green-500/40" : "bg-white/10"}`} />
+                    )}
                   </div>
-
-                  <span className="text-xs font-medium">
-                    Claim Information
-                  </span>
-                </div>
-
-                <div className="h-[1px] flex-1 bg-white/10" />
-
-                <div className="flex items-center gap-2 opacity-50">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/20">
-                    2
-                  </div>
-
-                  <span className="text-xs">
-                    Attachments
-                  </span>
-                </div>
-
-                <div className="h-[1px] flex-1 bg-white/10" />
-
-                <div className="flex items-center gap-2 opacity-50">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/20">
-                    3
-                  </div>
-
-                  <span className="text-xs">
-                    Review & Submit
-                  </span>
-                </div>
-
+                ))}
               </div>
 
               <div className="space-y-5">
@@ -654,302 +646,100 @@ export default function NewClaimPage() {
                 )}
 
                 {step === 3 && (
-                  <div className="space-y-3">
+                  <div className="space-y-4">
 
-                    {/* Claim Summary */}
-                    <div
-                      className="
-                  rounded-3xl
-                  border
-                  border-white/10
-                  bg-white/[0.04]
-                  p-4
-                  backdrop-blur-xl
-                  "
-                    >
-                      <h3 className="text-base font-semibold">
-                        Claim Summary
-                      </h3>
-
-                      <div className="mt-3 grid gap-3 md:grid-cols-4">
-
-                        <div>
-                          <p className="text-xs text-white/50">
-                            Total Expenses
-                          </p>
-
-                          <p className="mt-1 text-sm">
-                            {formData.expenseItems?.length || 0}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-xs text-white/50">
-                            Claim Amount
-                          </p>
-
-                          <p className="mt-1 text-sm">
-                            ৳ {
-                              formData.expenseItems
-                                ?.reduce(
-                                  (sum: number, item: any) =>
-                                    sum + Number(item.amount || 0),
-                                  0
-                                )
-                                .toLocaleString() || "0"
-                            }
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-xs text-white/50">
-                            Claim Date
-                          </p>
-
-                          <p className="mt-1 text-sm">
-                            {formData.claimDate || "-"}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-xs text-white/50">
-                            Status
-                          </p>
-
-                          <p className="mt-1 text-sm text-yellow-300">
-                            Draft
-                          </p>
-                        </div>
-
-
+                    {/* Claim Summary Cards */}
+                    <div className="grid grid-cols-4 gap-3">
+                      <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4 text-center">
+                        <p className="text-[10px] text-white/50 uppercase tracking-wide">Total Items</p>
+                        <p className="mt-1 text-2xl font-bold text-cyan-300">{formData.expenseItems?.length || 0}</p>
+                      </div>
+                      <div className="col-span-2 rounded-2xl border border-blue-500/20 bg-blue-500/10 p-4 text-center">
+                        <p className="text-[10px] text-white/50 uppercase tracking-wide">Total Amount</p>
+                        <p className="mt-1 text-2xl font-bold text-blue-300">
+                          ৳ {formData.expenseItems?.reduce((sum: number, item: any) => sum + Number(item.amount || 0), 0).toLocaleString() || "0"}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/10 p-4 text-center">
+                        <p className="text-[10px] text-white/50 uppercase tracking-wide">Status</p>
+                        <p className="mt-1 text-sm font-semibold text-yellow-300">Draft</p>
+                        <p className="text-[10px] text-white/40">{formData.claimDate}</p>
                       </div>
                     </div>
 
                     {/* Employee Info */}
-                    <EmployeeInfoCard
-                      employee={employeeInfo}
-                    />
+                    <EmployeeInfoCard employee={employeeInfo} />
 
-                    {/* Expense Summary */}
-
-                    <div
-                      className="
-                  rounded-3xl
-                  border
-                  border-white/10
-                  bg-white/[0.04]
-                  p-4
-                  backdrop-blur-xl
-                  "
-                    >
-                      <h3 className="text-base font-semibold">
-                        Expense Details
-                      </h3>
-
-                      <div className="mt-4 overflow-x-auto">
-
-                        <table className="w-full text-sm">
-
+                    {/* Expense Details */}
+                    <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur-xl">
+                      <h3 className="mb-4 text-sm font-semibold text-white">Expense Details</h3>
+                      <div className="overflow-x-auto rounded-2xl border border-white/10">
+                        <table className="w-full text-xs">
                           <thead>
-                            <tr className="border-b border-white/10">
-
-                              <th className="p-2 text-left">
-                                Expense Date
-                              </th>
-
-                              <th className="p-2 text-left">
-                                Claim Type
-                              </th>
-
-                              <th className="p-2 text-left">
-                                Purpose
-                              </th>
-
-                              <th className="p-2 text-left">
-                                Mode
-                              </th>
-
-                              <th className="p-2 text-left">
-                                Project
-                              </th>
-
-                              <th className="p-2 text-left">
-                                From
-                              </th>
-
-                              <th className="p-2 text-left">
-                                To
-                              </th>
-
-                              <th className="p-2 text-right">
-                                Amount
-                              </th>
-
+                            <tr className="border-b border-white/10 bg-white/[0.03]">
+                              {["#", "Date", "Type", "Purpose", "Mode", "Project", "From", "To", "Amount"].map((h, i) => (
+                                <th key={h} className={`px-3 py-2.5 text-[10px] font-semibold text-white/50 uppercase tracking-wide ${i === 8 ? "text-right" : "text-left"}`}>{h}</th>
+                              ))}
                             </tr>
                           </thead>
-
                           <tbody>
-
-                            {formData.expenseItems?.map(
-                              (item: any) => (
-                                <tr
-                                  key={item.id}
-                                  className="
-                              border-b
-                              border-white/5
-                              "
-                                >
-
-                                  <td className="p-2">
-                                    {item.expenseDate || "-"}
-                                  </td>
-
-                                  <td className="p-2">
-                                    {expenseTypes.find((e: any) => e.id === item.claimType)?.name || item.claimType || "-"}
-                                  </td>
-
-                                  <td className="p-2">
-                                    {item.purpose || "-"}
-                                  </td>
-
-                                  <td className="p-2">
-                                    {item.mode || "-"}
-                                  </td>
-
-                                  <td className="p-2">
-                                    {projects.find((p: any) => p.id === item.project)?.name || item.project || "-"}
-                                  </td>
-
-                                  <td className="p-2">
-                                    {item.from || "-"}
-                                  </td>
-
-                                  <td className="p-2">
-                                    {item.to || "-"}
-                                  </td>
-
-                                  <td className="p-2 text-right">
-                                    ৳ {item.amount || 0}
-                                  </td>
-
-                                </tr>
-                              )
-                            )}
-
+                            {formData.expenseItems?.map((item: any, idx: number) => (
+                              <tr key={item.id} className="border-b border-white/5">
+                                <td className="px-3 py-2.5 text-white/40">{idx + 1}</td>
+                                <td className="px-3 py-2.5">{item.expenseDate || "-"}</td>
+                                <td className="px-3 py-2.5 text-cyan-300">{expenseTypes.find((e: any) => e.id === item.claimType)?.name || "-"}</td>
+                                <td className="px-3 py-2.5">{item.purpose || "-"}</td>
+                                <td className="px-3 py-2.5 text-white/70">{item.mode || "-"}</td>
+                                <td className="px-3 py-2.5 text-white/70">{projects.find((p: any) => p.id === item.project)?.name || "-"}</td>
+                                <td className="px-3 py-2.5 text-white/70">{item.from || "-"}</td>
+                                <td className="px-3 py-2.5 text-white/70">{item.to || "-"}</td>
+                                <td className="px-3 py-2.5 text-right font-semibold text-cyan-300">৳ {Number(item.amount || 0).toLocaleString()}</td>
+                              </tr>
+                            ))}
                           </tbody>
-
-
                         </table>
-
                       </div>
-
                     </div>
 
-                    <div
-                      className="
-                  rounded-3xl
-                  border
-                  border-white/10
-                  bg-white/[0.04]
-                  p-5
-                  backdrop-blur-xl
-                  "
-                    >
-                      <h3 className="text-base font-semibold">
+                    {/* Attachments */}
+                    <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur-xl">
+                      <h3 className="mb-4 text-sm font-semibold text-white">
                         Attachments
-                      </h3>
-
-                      <div
-                        className="
-                    mt-3
-                    grid
-                    gap-3
-                    grid-cols-1
-                    md:grid-cols-2
-                    xl:grid-cols-3
-                    "
-                      >
-
-                        {formData.attachments?.length > 0 ? (
-
-                          formData.attachments.map(
-                            (file: any, index: number) => (
-
-                              <div
-                                key={index}
-                                className="
-                            rounded-2xl
-                            border
-                            border-white/10
-                            bg-white/5
-                            p-3
-                            "
-                              >
-                                <div className="text-2xl">
-                                  📄
-                                </div>
-
-                                <p
-                                  className="
-                              mt-2
-                              truncate
-                              text-sm
-                              font-medium
-                              "
-                                >
-                                  {file.name}
-                                </p>
-
-                                <p className="text-xs text-white/50">
-                                  {(file.size / 1024 / 1024).toFixed(2)} MB
-                                </p>
-
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const meta = uploadedFileMeta[index];
-                                    if (meta?.storage_path) {
-                                      window.open(
-                                        `${process.env.NEXT_PUBLIC_API_BASE_URL?.replace("/api", "")}/${meta.storage_path}`,
-                                        "_blank"
-                                      );
-                                    }
-                                  }}
-                                  className="
-                              mt-2
-                              text-xs
-                              text-cyan-300
-                              "
-                                >
-                                  Preview
-                                </button>
-
-                              </div>
-
-                            )
-                          )
-
-                        ) : (
-
-                          <div
-                            className="
-                        col-span-full
-                        rounded-2xl
-                        border
-                        border-white/10
-                        bg-white/5
-                        p-4
-                        text-sm
-                        text-white/50
-                        "
-                          >
-                            No attachment uploaded
-                          </div>
-
+                        {formData.attachments?.length > 0 && (
+                          <span className="ml-2 rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-white/50">{formData.attachments.length}</span>
                         )}
-
-                      </div>
-
+                      </h3>
+                      {formData.attachments?.length > 0 ? (
+                        <div className="grid gap-2 md:grid-cols-3">
+                          {formData.attachments.map((file: any, index: number) => (
+                            <div key={index} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-lg">📄</span>
+                                <div className="min-w-0">
+                                  <p className="truncate text-xs font-medium text-white">{file.name}</p>
+                                  <p className="text-[10px] text-white/40">{file.size ? (file.size / 1024 / 1024).toFixed(2) + " MB" : ""}</p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const meta = uploadedFileMeta[index];
+                                  if (meta?.storage_path) {
+                                    window.open(`${process.env.NEXT_PUBLIC_API_BASE_URL?.replace("/api", "")}/${meta.storage_path}`, "_blank");
+                                  }
+                                }}
+                                className="ml-2 shrink-0 rounded-lg bg-cyan-500/15 px-2 py-1 text-[10px] text-cyan-300 hover:bg-cyan-500/25 transition-colors"
+                              >
+                                Preview
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex h-16 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-xs text-white/40">
+                          No attachments uploaded
+                        </div>
+                      )}
                     </div>
 
 

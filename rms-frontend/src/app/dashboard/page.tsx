@@ -65,7 +65,14 @@ export default function DashboardPage() {
         reimbursementService.getApplications(),
       ]);
       setPendingApprovals(approvals || []);
-      setMyClaims(claims || []);
+      const allClaims = claims || [];
+      const userStr = localStorage.getItem("user");
+      const userObj = userStr ? JSON.parse(userStr) : null;
+      const userId = userObj?.id || userObj?.sub || null;
+      const myClaims = userId
+        ? allClaims.filter((c: any) => c.employee_id === userId)
+        : allClaims;
+      setMyClaims(myClaims);
     } catch (error) {
       console.error(error);
     } finally {

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { reimbursementService } from "@/services/reimbursement.service";
+import { apiClient } from "@/lib/api-client";
 import { expenseTypeService } from "@/services/expense-type.service";
 import { projectService } from "@/services/project.service";
 
@@ -66,6 +67,10 @@ export default function ApprovalDetailPage() {
   const [pendingActionType, setPendingActionType] = useState<string | null>(null);
   const [verifiedAmount, setVerifiedAmount] = useState("");
   const [adjustmentReason, setAdjustmentReason] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [transactionReference, setTransactionReference] = useState("");
+  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("");
   const [expenseTypes, setExpenseTypes] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
 
@@ -73,7 +78,17 @@ export default function ApprovalDetailPage() {
     loadClaim();
     loadMasterData();
     checkPendingTask();
+    loadPaymentMethods();
   }, []);
+
+  const loadPaymentMethods = async () => {
+    try {
+      const response = await apiClient.get("/payment-methods/");
+      setPaymentMethods(response.data || []);
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   const checkPendingTask = async () => {
     try {
@@ -85,6 +100,9 @@ export default function ApprovalDetailPage() {
       setPendingActionType(pending?.action_type || null);
       if (pending?.action_type === "Amount Verification") {
         setVerifiedAmount(String(pending.requested_amount || ""));
+      }
+      if (pending?.action_type === "Payment Processing") {
+        setPaymentAmount(String(pending.requested_amount || ""));
       }
     } catch {
       setHasPendingTask(false);
@@ -144,7 +162,14 @@ export default function ApprovalDetailPage() {
         await reimbursementService.returnToApplicant(claim.id, remarks);
       } else if (selectedAction === "BACK") {
         await reimbursementService.backToPreviousStage(claim.id, remarks);
+      } else if (selectedAction === "PAY") {
+        await reimbursementService.processPayment(claim.id, {
+          payment_method_id: "default",
+          payment_amount: Number(claim.verified_amount || claim.requested_amount || 0),
+          remarks: remarks || undefined,
+        });
       }
+      
       toast.success("Action completed successfully.");
       router.push("/approvals");
     } catch (error: any) {
@@ -322,6 +347,17 @@ export default function ApprovalDetailPage() {
                   </div>
                 ) : (
                 <div className="space-y-3">
+                  {pendingActionType === "Payment Processing" && (
+                    <>
+                      <div>
+                        <label className="text-xs text-white/60">Payment Amount</label>
+                        <div className="mt-1 h-10 rounded-xl border border-white/10 bg-white/5 px-3 flex items-center text-xs text-cyan-300 font-semibold">
+                          ৳ {Number(claim.verified_amount || claim.requested_amount || 0).toLocaleString()}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
                   {pendingActionType === "Amount Verification" && (
                     <>
                       <div>
@@ -351,7 +387,7 @@ export default function ApprovalDetailPage() {
                     >
                       <option value="" className="bg-[#17386E]">Select Action</option>
                       {claim.workflow_actions
-                        ?.filter((action: any) => ["APPROVE", "REJECT", "BACK", "RETURN", "VERIFY"].includes(action.action_code))
+                        ?.filter((action: any) => ["APPROVE", "REJECT", "BACK", "RETURN", "VERIFY", "PAY"].includes(action.action_code))
                         .map((action: any) => (
                           <option key={action.action_code} value={action.action_code} className="bg-[#17386E]">
                             {action.action_name}

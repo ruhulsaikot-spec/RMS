@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Search, Plus, Building2, X } from "lucide-react";
 import Sidebar from "@/components/layout/sidebar";
 import Topbar from "@/components/layout/topbar";
 import PermissionGuard from "@/components/auth/permission-guard";
@@ -10,1364 +11,349 @@ import { useRBAC } from "@/hooks/use-rbac";
 import { apiClient } from "@/lib/api-client";
 import axios from "axios";
 
+const inputClass = "w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-white/30 outline-none focus:border-cyan-500/50 transition-colors";
+const selectClass = "w-full rounded-xl border border-white/10 bg-[#0d1f40] px-3 py-2 text-xs text-white outline-none focus:border-cyan-500/50 transition-colors";
+
+const emptyForm = { code: "", name: "", contactPerson: "", mobile: "", email: "", website: "", country: "Bangladesh", city: "", logo: "", status: "Active" };
+
 export default function CompaniesPage() {
+  const { canCreate, canEdit, canDelete } = useRBAC("Company");
+  const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [companies, setCompanies] = useState<any[]>([]);
+  const [companyForm, setCompanyForm] = useState(emptyForm);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [saving, setSaving] = useState(false);
+  const recordsPerPage = 10;
 
-    const {
-      canCreate,
-      canEdit,
-      canDelete,
-    } = useRBAC("Company");
+  useEffect(() => { loadCompanies(); }, []);
 
-    const [showModal, setShowModal] = useState(false);
+  const loadCompanies = async () => {
+    try {
+      const response = await apiClient.get("/companies/");
+      setCompanies(response.data.map((item: any) => ({
+        id: item.id, code: item.code, name: item.name,
+        contactPerson: item.contact_person, mobile: item.mobile || "",
+        email: item.email, website: item.website || "",
+        country: item.country, city: item.city || "", logo: item.logo || "",
+        status: item.is_active ? "Active" : "Inactive",
+      })));
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to load companies.");
+    }
+  };
 
-const [editingId, setEditingId] =
-  useState<number | null>(null);
-
-const [deleteId, setDeleteId] =
-  useState<number | null>(null);
-
-const [companies, setCompanies] =
-useState<any[]>([]);
-
-const [companyForm, setCompanyForm] = useState({
-  code: "",
-  name: "",
-  contactPerson: "",
-  mobile: "",
-  email: "",
-  website: "",
-  country: "Bangladesh",
-  city: "",
-  logo: "",
-  status: "Active",
-});
-
-const [search, setSearch] = useState("");
-const [statusFilter, setStatusFilter] =
-  useState("All");
-
-const [currentPage, setCurrentPage] =
-  useState(1);
-
-const loadCompanies = async () => {
-
-  try {
-
-    const response =
-      await apiClient.get(
-        "/companies/"
-      );
-
-    const companiesData =
-      response.data.map(
-        (item: any) => ({
-          id: item.id,
-          code: item.code,
-          name: item.name,
-          contactPerson:
-            item.contact_person,
-          mobile:
-            item.mobile || "",
-          email:
-            item.email,
-          website:
-            item.website || "",
-          country:
-            item.country,
-          city:
-            item.city || "",
-          logo:
-            item.logo || "",
-          references: 0,
-          status:
-            item.is_active
-              ? "Active"
-              : "Inactive",
-        })
-      );
-
-    setCompanies(
-      companiesData
-    );
-
-  } catch (error) {
-
-    console.error(error);
-
-    toast.error(
-      "Failed to load companies."
-    );
-  }
-};
-
-useEffect(() => {
-  loadCompanies();
-}, []);
-
-const recordsPerPage = 10;
-
-const filteredCompanies =
-  companies.filter((company) => {
-
-    const matchesSearch =
-      company.code
-        .toLowerCase()
-        .includes(search.toLowerCase()) ||
-
-      company.name
-        .toLowerCase()
-        .includes(search.toLowerCase()) ||
-
-      company.contactPerson
-        .toLowerCase()
-        .includes(search.toLowerCase());
-
-    const matchesStatus =
-      statusFilter === "All" ||
-      company.status === statusFilter;
-
-    return matchesSearch && matchesStatus;
+  const filteredCompanies = companies.filter((c) => {
+    const matchSearch = c.code.toLowerCase().includes(search.toLowerCase()) ||
+      c.name.toLowerCase().includes(search.toLowerCase()) ||
+      (c.contactPerson || "").toLowerCase().includes(search.toLowerCase());
+    const matchStatus = statusFilter === "All" || c.status === statusFilter;
+    return matchSearch && matchStatus;
   });
 
-const totalPages = Math.ceil(
-  filteredCompanies.length /
-  recordsPerPage
-);
+  const totalPages = Math.ceil(filteredCompanies.length / recordsPerPage);
+  const startIndex = (currentPage - 1) * recordsPerPage;
+  const paginatedCompanies = filteredCompanies.slice(startIndex, startIndex + recordsPerPage);
 
-const startIndex =
-  (currentPage - 1) *
-  recordsPerPage;
+  const openEdit = (company: any) => {
+    setEditingId(company.id);
+    setCompanyForm({
+      code: company.code, name: company.name, contactPerson: company.contactPerson,
+      mobile: company.mobile, email: company.email, website: company.website,
+      country: company.country || "Bangladesh", city: company.city,
+      logo: company.logo, status: company.status,
+    });
+    setShowModal(true);
+  };
 
-const paginatedCompanies =
-  filteredCompanies.slice(
-    startIndex,
-    startIndex + recordsPerPage
+  const openNew = () => {
+    setEditingId(null);
+    setCompanyForm(emptyForm);
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setEditingId(null);
+    setCompanyForm(emptyForm);
+  };
+
+  const handleSave = async () => {
+    if (!companyForm.code || !companyForm.name || !companyForm.contactPerson || !companyForm.email) {
+      toast.error("Code, Name, Contact Person and Email are required.");
+      return;
+    }
+    try {
+      setSaving(true);
+      if (editingId) {
+        await apiClient.put(`/companies/${editingId}`, {
+          code: companyForm.code, name: companyForm.name,
+          contact_person: companyForm.contactPerson, mobile: companyForm.mobile,
+          email: companyForm.email, website: companyForm.website,
+          country: companyForm.country, city: companyForm.city,
+          logo: companyForm.logo, is_active: companyForm.status === "Active",
+        });
+        toast.success("Company updated successfully.");
+      } else {
+        await apiClient.post("/companies/", {
+          code: companyForm.code, name: companyForm.name,
+          contact_person: companyForm.contactPerson, mobile: companyForm.mobile,
+          email: companyForm.email, website: companyForm.website,
+          country: companyForm.country, city: companyForm.city, logo: companyForm.logo,
+        });
+        toast.success("Company created successfully.");
+      }
+      await loadCompanies();
+      closeModal();
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        toast.error(error.response?.data?.detail || "Operation failed.");
+      } else {
+        toast.error("Operation failed.");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      await apiClient.delete(`/companies/${deleteId}`);
+      await loadCompanies();
+      toast.success("Company deleted successfully.");
+      setDeleteId(null);
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to delete company.");
+    }
+  };
+
+  const field = (label: string, value: string, field: string, required = false, type = "text") => (
+    <div>
+      <label className="mb-1.5 block text-xs font-medium text-white/60">
+        {label} {required && <span className="text-red-400">*</span>}
+      </label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => setCompanyForm({ ...companyForm, [field]: e.target.value })}
+        className={inputClass}
+      />
+    </div>
   );
+
   return (
-  <PermissionGuard
-    permission="company:read"
-    >
-    <main className="relative flex min-h-screen overflow-hidden bg-gradient-to-b from-[#030B1F] to-[#06153C] text-white">
-
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(59,130,246,0.35),transparent_30%),radial-gradient(circle_at_85%_15%,rgba(34,211,238,0.20),transparent_25%),radial-gradient(circle_at_80%_80%,rgba(99,102,241,0.25),transparent_30%),radial-gradient(circle_at_50%_50%,rgba(37,99,235,0.12),transparent_50%)]" />
-
-        <div
-        className="
-        absolute
-        left-1/2
-        top-1/2
-        h-[1800px]
-        w-[1800px]
-        -translate-x-1/2
-        -translate-y-1/2
-        rounded-full
-        bg-cyan-500/10
-        blur-[260px]
-        "
-        />
+    <PermissionGuard permission="company:read">
+      <main className="relative flex min-h-screen overflow-hidden bg-gradient-to-b from-[#030B1F] to-[#06153C] text-white">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(59,130,246,0.35),transparent_30%),radial-gradient(circle_at_85%_15%,rgba(34,211,238,0.20),transparent_25%),radial-gradient(circle_at_80%_80%,rgba(99,102,241,0.25),transparent_30%)]" />
 
         <div className="relative z-10 flex min-h-screen w-full">
+          <Sidebar active="companies" />
 
-        <Sidebar active="companies" />
+          <section className="flex-1 flex flex-col">
+            <Topbar title="Companies" subtitle="Manage organizational companies" />
 
-        <section className="flex-1">
+            <div className="flex-1 p-5 space-y-4">
 
-          <Topbar
-            title="Companies"
-            subtitle="Manage organizational companies"
-          />
+              {/* Stat Cards */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4">
+                  <div className="flex items-center gap-2">
+                    <Building2 size={16} className="text-cyan-300" />
+                    <p className="text-xs text-white/60">Total Companies</p>
+                  </div>
+                  <p className="mt-2 text-2xl font-bold text-cyan-300">{companies.length}</p>
+                </div>
+                <div className="rounded-2xl border border-green-500/20 bg-green-500/10 p-4">
+                  <p className="text-xs text-white/60">Active</p>
+                  <p className="mt-2 text-2xl font-bold text-green-300">{companies.filter((c) => c.status === "Active").length}</p>
+                </div>
+                <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4">
+                  <p className="text-xs text-white/60">Inactive</p>
+                  <p className="mt-2 text-2xl font-bold text-red-300">{companies.filter((c) => c.status === "Inactive").length}</p>
+                </div>
+              </div>
 
-          <div className="p-4">
-
-            <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur-xl">
-
-              <div className="mb-4 grid gap-3 md:grid-cols-4">
-
-                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-                    <p className="text-[11px] text-white/60">
-                    Total Companies
-                    </p>
-
-                    <h3 className="mt-1 text-lg font-semibold text-cyan-300">
-                    {companies.length}
-                    </h3>
+              {/* Toolbar */}
+              <div className="flex items-center gap-3">
+                <div className="flex w-[220px] items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-3 py-2">
+                  <Search size={14} className="text-white/50" />
+                  <input placeholder="Search company..." value={search}
+                    onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
+                    className="flex-1 bg-transparent text-xs outline-none placeholder:text-white/40 text-white" />
                 </div>
 
-                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-                    <p className="text-[11px] text-white/60">
-                    Active
-                    </p>
-
-                    <h3 className="mt-1 text-lg font-semibold text-green-300">
-                    {
-                        companies.filter(
-                        (d) => d.status === "Active"
-                        ).length
-                    }
-                    </h3>
-                </div>
-
-                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-                    <p className="text-[11px] text-white/60">
-                    Inactive
-                    </p>
-
-                    <h3 className="mt-1 text-lg font-semibold text-red-300">
-                    {
-                        companies.filter(
-                        (d) => d.status === "Inactive"
-                        ).length
-                    }
-                    </h3>
-                </div>
-
-                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-                    <p className="text-[11px] text-white/60">
-                    References
-                    </p>
-
-                    <h3 className="mt-1 text-lg font-semibold text-cyan-300">
-                    {companies.reduce(
-                        (sum, item) => sum + item.references,
-                        0
-                    )}
-                    </h3>
-                </div>
-
-                </div>
-
-                <div className="mb-4 flex items-center justify-between">
-
-                <div className="flex items-center gap-2">
-
-                    <input
-                    placeholder="Search company..."
-                    value={search}
-                    onChange={(e) => {
-                        setSearch(e.target.value);
-                        setCurrentPage(1);
-                    }}
-                    className="
-                    h-9
-                    w-[220px]
-                    rounded-xl
-                    border
-                    border-white/10
-                    bg-white/[0.04]
-                    px-3
-                    text-xs
-                    text-white
-                    "
-                    />
-
-                    <select
-                    value={statusFilter}
-                    onChange={(e) => {
-                        setStatusFilter(e.target.value);
-                        setCurrentPage(1);
-                    }}
-                    className="
-                    h-9
-                    rounded-xl
-                    border
-                    border-white/10
-                    bg-white/[0.04]
-                    px-3
-                    text-xs
-                    text-white
-                    "
-                    >
-                    <option
-                        value="All"
-                        className="bg-[#102E67] text-white"
-                    >
-                        All
-                    </option>
-
-                    <option
-                        value="Active"
-                        className="bg-[#102E67] text-white"
-                    >
-                        Active
-                    </option>
-
-                    <option
-                        value="Inactive"
-                        className="bg-[#102E67] text-white"
-                    >
-                        Inactive
-                    </option>
-                    </select>
-
-                </div>
-
-                <ActionGuard
-                permission="company:create"
-                >
-                    <button
-                        onClick={() => {
-
-                        setEditingId(null);
-
-                        setCompanyForm({
-                        code: "",
-                        name: "",
-                        contactPerson: "",
-                        mobile: "",
-                        email: "",
-                        website: "",
-                        country: "Bangladesh",
-                        city: "",
-                        logo: "",
-                        status: "Active",
-                    });
-
-                    setShowModal(true);
-                    }}
-                    className="
-                    h-9
-                    rounded-xl
-                    bg-cyan-500
-                    px-4
-                    text-xs
-                    font-medium
-                    text-black
-                    "
-                >
-                    + New Company
-                </button>
-                </ActionGuard>
-
-                </div>
-
-            </div>
-
-            <div
-                className="
-                mt-4
-                overflow-hidden
-                rounded-2xl
-                border
-                border-white/10
-                bg-white/[0.04]
-                "
-            >
-
-            <table className="w-full">
-
-                <thead>
-
-                <tr className="border-b border-white/10 bg-white/[0.04]">
-
-                    <th className="p-3 text-left text-xs">
-                    Company Code
-                    </th>
-
-                    <th className="p-3 text-left text-xs">
-                    Company Name
-                    </th>
-
-                    <th className="p-3 text-left text-xs">
-                    Contact Person
-                    </th>
-
-                    <th className="p-3 text-left text-xs">
-                    Official Email
-                    </th>
-
-                    <th className="p-3 text-left text-xs">
-                    Mobile
-                    </th>
-
-                    <th className="p-3 text-left text-xs">
-                    Website
-                    </th>
-
-                    <th className="p-3 text-left text-xs">
-                    Status
-                    </th>
-
-                    <th className="p-3 text-left text-xs">
-                    Action
-                    </th>
-
-                </tr>
-
-                </thead>
-
-                <tbody>
-
-                {paginatedCompanies.map((company) => (
-
-                    <tr
-                    key={company.id}
-                    className="border-b border-white/5"
-                    >
-
-                    <td className="p-3 text-xs">
-                        {company.code}
-                    </td>
-
-                    <td className="p-3 text-xs">
-                        {company.name}
-                    </td>
-
-                    <td className="p-3 text-xs">
-                        {company.contactPerson}
-                    </td>
-
-                    <td className="p-3 text-xs">
-                        {company.email}
-                    </td>
-
-                    <td className="p-3 text-xs">
-                        {company.mobile}
-                    </td>
-
-                    <td className="p-3 text-xs">
-                        {company.website}
-                    </td>
-                    
-                    <td
-                        className={`p-3 text-xs ${
-                        company.status === "Active"
-                            ? "text-green-300"
-                            : "text-red-300"
-                        }`}
-                    >
-                        {company.status}
-                    </td>
-
-                    <td className="p-3 flex gap-3">
-
-                        <ActionGuard
-                          permission="company:update"
-
-                        >
-                        <button
-                            onClick={() => {
-
-                                setEditingId(company.id);
-
-                            setCompanyForm({
-                            code: company.code,
-                            name: company.name,
-                            contactPerson:
-                                company.contactPerson,
-                            mobile:
-                                company.mobile || "",
-                            email:
-                                company.email,
-                            website:
-                                company.website || "",
-                            country:
-                                company.country || "Bangladesh",
-                            city:
-                                company.city || "",
-                            logo:
-                                company.logo || "",
-                            status:
-                                company.status,
-                        });
-
-                            setShowModal(true);
-
-                        }}
-                        className="
-                        text-cyan-300
-                        text-xs
-                        "
-                        >
-                        Edit
-                        </button>
-                        </ActionGuard>
-
-                        <ActionGuard
-                              permission="company:delete"
-
-                            >
-                            <button
-                                onClick={async () => {
-
-                                    if (company.references > 0) {
-
-                            toast.error(
-                                "Company cannot be deleted because it is assigned in the system."
-                            );
-
-                            return;
-                            }
-
-                            setDeleteId(company.id);
-
-                        }}
-                        className="
-                        text-red-300
-                        text-xs
-                        "
-                        >
-                        Delete
-                        </button>
-                        </ActionGuard>
-
-                    </td>
-
-                    </tr>
-
-                ))}
-
-                </tbody>
-
-            </table>
-
-            <div className="mt-4 flex items-center justify-between px-3 pb-3">
-
-            <p className="text-xs text-white/60">
-                Showing {startIndex + 1} -
-                {Math.min(
-                    startIndex + recordsPerPage,
-                    filteredCompanies.length
-                )} of {filteredCompanies.length}
-            </p>
-
-            <div className="flex items-center gap-1">
-
-                <button
-                disabled={currentPage === 1}
-                onClick={() =>
-                    setCurrentPage(currentPage - 1)
-                }
-                className="
-                h-8
-                px-3
-                rounded-lg
-                border
-                border-white/10
-                bg-white/[0.04]
-                text-xs
-                disabled:opacity-40
-                "
-                >
-                Previous
-                </button>
-
-                {Array.from(
-                { length: totalPages },
-                (_, i) => (
-                    <button
-                    key={i}
-                    onClick={() =>
-                        setCurrentPage(i + 1)
-                    }
-                    className={`
-                    h-8
-                    min-w-[32px]
-                    rounded-lg
-                    text-xs
-                    ${
-                        currentPage === i + 1
-                        ? "bg-cyan-500 text-black"
-                        : "bg-white/[0.04]"
-                    }
-                    `}
-                    >
-                    {i + 1}
+                <select value={statusFilter}
+                  onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+                  className="h-9 rounded-xl border border-white/10 bg-white/10 px-3 text-xs text-white appearance-none">
+                  {["All", "Active", "Inactive"].map((s) => (
+                    <option key={s} value={s} className="bg-[#17386E]">{s}</option>
+                  ))}
+                </select>
+
+                <div className="ml-auto">
+                  <ActionGuard permission="company:create">
+                    <button onClick={openNew}
+                      className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-2 text-xs font-semibold text-black hover:opacity-90 transition-opacity">
+                      <Plus size={13} /> New Company
                     </button>
-                )
-                )}
+                  </ActionGuard>
+                </div>
+              </div>
 
-                <button
-                disabled={currentPage === totalPages}
-                onClick={() =>
-                    setCurrentPage(currentPage + 1)
-                }
-                className="
-                h-8
-                px-3
-                rounded-lg
-                border
-                border-white/10
-                bg-white/[0.04]
-                text-xs
-                disabled:opacity-40
-                "
-                >
-                Next
-                </button>
+              {/* Table */}
+              <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-xl">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-white/10">
+                      {["Code", "Company Name", "Contact Person", "Email", "Mobile", "Website", "Status", "Action"].map((h, i) => (
+                        <th key={h} className={`px-4 py-3 text-left text-xs font-semibold text-white/60 uppercase tracking-wide ${i === 7 ? "text-right" : ""}`}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedCompanies.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-12 text-center text-xs text-white/40">No companies found</td>
+                      </tr>
+                    ) : paginatedCompanies.map((company) => (
+                      <tr key={company.id} className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
+                        <td className="px-4 py-3 text-xs font-semibold text-cyan-300">{company.code}</td>
+                        <td className="px-4 py-3 text-xs font-medium text-white">{company.name}</td>
+                        <td className="px-4 py-3 text-xs text-white/70">{company.contactPerson}</td>
+                        <td className="px-4 py-3 text-xs text-white/70">{company.email}</td>
+                        <td className="px-4 py-3 text-xs text-white/70">{company.mobile || "-"}</td>
+                        <td className="px-4 py-3 text-xs text-white/70">{company.website || "-"}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                            company.status === "Active"
+                              ? "bg-green-500/15 text-green-300 border border-green-400/30"
+                              : "bg-red-500/15 text-red-300 border border-red-400/30"
+                          }`}>
+                            <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                            {company.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex justify-end gap-1.5">
+                            <ActionGuard permission="company:update">
+                              <button onClick={() => openEdit(company)}
+                                className="rounded-lg border border-cyan-400/20 bg-cyan-500/10 px-2.5 py-1 text-xs text-cyan-300 hover:bg-cyan-500/20 transition-colors">
+                                Edit
+                              </button>
+                            </ActionGuard>
+                            <ActionGuard permission="company:delete">
+                              <button onClick={() => setDeleteId(company.id)}
+                                className="rounded-lg border border-red-400/20 bg-red-500/10 px-2.5 py-1 text-xs text-red-300 hover:bg-red-500/20 transition-colors">
+                                Delete
+                              </button>
+                            </ActionGuard>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {/* Pagination */}
+                <div className="flex items-center justify-between border-t border-white/5 px-4 py-3">
+                  <p className="text-xs text-white/40">
+                    Showing {Math.min(startIndex + 1, filteredCompanies.length)}–{Math.min(startIndex + recordsPerPage, filteredCompanies.length)} of {filteredCompanies.length}
+                  </p>
+                  <div className="flex gap-1">
+                    <button disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}
+                      className="h-7 px-3 rounded-lg border border-white/10 bg-white/5 text-xs text-white/60 disabled:opacity-30">← Prev</button>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                      <button key={page} onClick={() => setCurrentPage(page)}
+                        className={`h-7 w-7 rounded-lg text-xs font-medium ${currentPage === page ? "bg-cyan-500 text-black" : "border border-white/10 bg-white/5 text-white/60"}`}>
+                        {page}
+                      </button>
+                    ))}
+                    <button disabled={currentPage === totalPages || totalPages === 0} onClick={() => setCurrentPage((p) => p + 1)}
+                      className="h-7 px-3 rounded-lg border border-white/10 bg-white/5 text-xs text-white/60 disabled:opacity-30">Next →</button>
+                  </div>
+                </div>
+              </div>
 
             </div>
-
+          </section>
         </div>
 
-            </div>
+        {/* Create/Edit Modal */}
+        {showModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="w-full max-w-3xl rounded-3xl border border-white/10 bg-[#0d1f40] p-6 shadow-[0_25px_60px_rgba(0,0,0,0.5)]">
+              <div className="mb-5 flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-white">{editingId ? "Update Company" : "New Company"}</h2>
+                  <p className="text-xs text-white/40">{editingId ? "Update company information" : "Fill in company details"}</p>
+                </div>
+                <button onClick={closeModal} className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white/60 hover:bg-white/10">
+                  <X size={14} />
+                </button>
+              </div>
 
+              <div className="grid gap-4 md:grid-cols-2">
+                {field("Company Code", companyForm.code, "code", true)}
+                {field("Company Name", companyForm.name, "name", true)}
+                {field("Contact Person", companyForm.contactPerson, "contactPerson", true)}
+                {field("Official Email", companyForm.email, "email", true, "email")}
+                {field("Mobile Number", companyForm.mobile, "mobile")}
+                {field("Website", companyForm.website, "website")}
+                {field("Country", companyForm.country, "country")}
+                {field("City", companyForm.city, "city")}
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-white/60">Status</label>
+                  <select value={companyForm.status}
+                    onChange={(e) => setCompanyForm({ ...companyForm, status: e.target.value })}
+                    className={selectClass}>
+                    <option value="Active" className="bg-[#0d1f40]">Active</option>
+                    <option value="Inactive" className="bg-[#0d1f40]">Inactive</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="mt-5 flex justify-end gap-2">
+                <button onClick={closeModal}
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-white/60 hover:bg-white/10 transition-colors">
+                  Cancel
+                </button>
+                <button onClick={handleSave} disabled={saving}
+                  className="rounded-xl bg-cyan-500 px-4 py-2 text-xs font-semibold text-black hover:bg-cyan-400 transition-colors disabled:opacity-50">
+                  {saving ? "Saving..." : editingId ? "Update Company" : "Save Company"}
+                </button>
+              </div>
+            </div>
           </div>
-
-          {showModal && (
-
-            <div
-                className="
-                fixed
-                inset-0
-                z-50
-                flex
-                items-center
-                justify-center
-                bg-black/60
-                backdrop-blur-sm
-                "
-            >
-
-                <div
-                className="
-                w-full
-                max-w-4xl
-                rounded-3xl
-                border
-                border-white/10
-                bg-[#102E67]
-                p-5
-                shadow-[0_25px_50px_rgba(0,0,0,0.45)]
-                "
-                >
-
-                <div className="mb-4 flex items-center justify-between">
-
-                    <h2 className="text-lg font-semibold">
-                    {editingId
-                        ? "Update Company"
-                        : "Create Company"}
-                    </h2>
-
-                    <button
-                    onClick={() => {
-                        setEditingId(null);
-                        setShowModal(false);
-                    }}
-                    className="text-white/60"
-                    >
-                    ✕
-                    </button>
-
-                </div>
-
-                <div
-                    className="
-                    grid
-                    gap-4
-                    md:grid-cols-2
-                    rounded-2xl
-                    border
-                    border-white/10
-                    bg-white/10
-                    p-4
-                    "
-                    >
-
-                    <div>
-                        <label className="mb-2 block text-xs text-white/60">
-                            Company Code *
-                        </label>
-
-                        <input
-                        value={companyForm.code}
-                        onChange={(e) =>
-                            setCompanyForm({
-                                ...companyForm,
-                                code: e.target.value,
-                            })
-                        }
-                        className="
-                        w-full
-                        rounded-xl
-                        border
-                        border-white/10
-                        bg-white/[0.04]
-                        px-3
-                        py-2
-                        text-xs
-                        "
-                        />
-                    </div>
-
-                    <div>
-                        <label className="mb-2 block text-xs text-white/60">
-                            Company Name *
-                        </label>
-
-                        <input
-                        value={companyForm.name}
-                        onChange={(e) =>
-                            setCompanyForm({
-                                ...companyForm,
-                                name: e.target.value,
-                            })
-                        }
-                        className="
-                        w-full
-                        rounded-xl
-                        border
-                        border-white/10
-                        bg-white/[0.04]
-                        px-3
-                        py-2
-                        text-xs
-                        "
-                        />
-                    </div>
-
-                    <div>
-                        <label className="mb-2 block text-xs text-white/60">
-                            Contact Person *
-                        </label>
-
-                        <input
-                        value={companyForm.contactPerson}
-                        onChange={(e) =>
-                            setCompanyForm({
-                                ...companyForm,
-                                contactPerson: e.target.value,
-                            })
-                        }
-                        className="
-                        w-full
-                        rounded-xl
-                        border
-                        border-white/10
-                        bg-white/[0.04]
-                        px-3
-                        py-2
-                        text-xs
-                        "
-                        />
-                    </div>
-
-                    <div>
-                        <label className="mb-2 block text-xs text-white/60">
-                            Mobile Number
-                        </label>
-
-                        <input
-                        value={companyForm.mobile}
-                        onChange={(e) =>
-                            setCompanyForm({
-                                ...companyForm,
-                                mobile: e.target.value,
-                            })
-                        }
-                        className="
-                        w-full
-                        rounded-xl
-                        border
-                        border-white/10
-                        bg-white/[0.04]
-                        px-3
-                        py-2
-                        text-xs
-                        "
-                        />
-                    </div>
-
-                    <div>
-                        <label className="mb-2 block text-xs text-white/60">
-                            Official Email *
-                        </label>
-
-                        <input
-                        type="email"
-                        value={companyForm.email}
-                        onChange={(e) =>
-                            setCompanyForm({
-                                ...companyForm,
-                                email: e.target.value,
-                            })
-                        }
-                        className="
-                        w-full
-                        rounded-xl
-                        border
-                        border-white/10
-                        bg-white/[0.04]
-                        px-3
-                        py-2
-                        text-xs
-                        "
-                        />
-                    </div>
-
-                    <div>
-                        <label className="mb-2 block text-xs text-white/60">
-                            Website
-                        </label>
-
-                        <input
-                        value={companyForm.website}
-                        onChange={(e) =>
-                            setCompanyForm({
-                                ...companyForm,
-                                website: e.target.value,
-                            })
-                        }
-                        className="
-                        w-full
-                        rounded-xl
-                        border
-                        border-white/10
-                        bg-white/[0.04]
-                        px-3
-                        py-2
-                        text-xs
-                        "
-                        />
-                    </div>
-
-                    <div>
-                        <label className="mb-2 block text-xs text-white/60">
-                            Country
-                        </label>
-
-                        <input
-                        value={companyForm.country}
-                        onChange={(e) =>
-                            setCompanyForm({
-                                ...companyForm,
-                                country: e.target.value,
-                            })
-                        }
-                        className="
-                        w-full
-                        rounded-xl
-                        border
-                        border-white/10
-                        bg-white/[0.04]
-                        px-3
-                        py-2
-                        text-xs
-                        "
-                        />
-                    </div>
-
-                    <div>
-                        <label className="mb-2 block text-xs text-white/60">
-                            City
-                        </label>
-
-                        <input
-                        value={companyForm.city}
-                        onChange={(e) =>
-                            setCompanyForm({
-                                ...companyForm,
-                                city: e.target.value,
-                            })
-                        }
-                        className="
-                        w-full
-                        rounded-xl
-                        border
-                        border-white/10
-                        bg-white/[0.04]
-                        px-3
-                        py-2
-                        text-xs
-                        "
-                        />
-                    </div>
-
-                    <div>
-                    <div>
-
-                    <label className="mb-2 block text-xs text-white/60">
-                    Company Logo
-                    </label>
-
-                    <div className="flex items-start gap-4">
-
-                        <div className="flex-1">
-
-                            <input
-                            type="file"
-                            accept="image/*"
-                            className="
-                            w-full
-                            rounded-xl
-                            border
-                            border-white/10
-                            bg-white/[0.04]
-                            px-3
-                            py-2
-                            text-xs
-                            "
-                            />
-
-                            <p className="mt-1 text-[10px] text-white/40">
-                                PNG, JPG, SVG
-                            </p>
-
-                        </div>
-
-                        <div
-                        className="
-                        flex
-                        h-20
-                        w-40
-                        shrink-0
-                        items-center
-                        justify-center
-                        rounded-xl
-                        border
-                        border-dashed
-                        border-white/20
-                        bg-white/[0.04]
-                        text-[10px]
-                        text-white/40
-                        "
-                        >
-                        Logo Preview
-                        </div>
-
-                    </div>
-
-                    </div>
-                    
-
-                    </div>
-
-                    <div>
-                        <label className="mb-2 block text-xs text-white/60">
-                            Status
-                        </label>
-
-                        <select
-                        value={companyForm.status}
-                        onChange={(e) =>
-                            setCompanyForm({
-                                ...companyForm,
-                                status: e.target.value,
-                            })
-                        }
-                        className="
-                        w-full
-                        rounded-xl
-                        border
-                        border-white/10
-                        bg-[#35538F]
-                        px-3
-                        py-2
-                        text-xs
-                        "
-                        >
-                            <option>Active</option>
-                            <option>Inactive</option>
-                        </select>
-                    </div>
-
-                                    </div>
-
-                    <div className="mt-5 flex justify-end gap-2">
-
-                        <button
-                        onClick={() => {
-                            setEditingId(null);
-
-                            setCompanyForm({
-                                code: "",
-                                name: "",
-                                contactPerson: "",
-                                mobile: "",
-                                email: "",
-                                website: "",
-                                country: "Bangladesh",
-                                city: "",
-                                logo: "",
-                                status: "Active",
-                            });
-
-                            setShowModal(false);
-                        }}
-                        className="
-                        rounded-xl
-                        border
-                        border-white/10
-                        px-4
-                        py-2
-                        text-xs
-                        "
-                        >
-                        Cancel
-                        </button>
-
-                        <button
-                        onClick={async () => {
-
-                            if (
-                                !companyForm.code ||
-                                !companyForm.name ||
-                                !companyForm.contactPerson ||
-                                !companyForm.email
-                            ) {
-
-                                toast.error(
-                                    "Company Code, Name, Contact Person and Email are required."
-                                );
-
-                                return;
-                            }
-
-                            const duplicateCode =
-                                companies.find(
-                                    (d) =>
-                                        d.code.toLowerCase() ===
-                                        companyForm.code.toLowerCase() &&
-                                        d.id !== editingId
-                                );
-
-                            if (duplicateCode) {
-
-                                toast.error(
-                                    "Company Code already exists."
-                                );
-
-                                return;
-                            }
-
-                            const duplicateName =
-                                companies.find(
-                                    (d) =>
-                                        d.name.toLowerCase() ===
-                                        companyForm.name.toLowerCase() &&
-                                        d.id !== editingId
-                                );
-
-                            if (duplicateName) {
-
-                                toast.error(
-                                    "Company Name already exists."
-                                );
-
-                                return;
-                            }
-
-                            const duplicateEmail =
-                                companies.find(
-                                    (d) =>
-                                        d.email.toLowerCase() ===
-                                        companyForm.email.toLowerCase() &&
-                                        d.id !== editingId
-                                );
-
-                            if (duplicateEmail) {
-
-                                toast.error(
-                                    "Company Email already exists."
-                                );
-
-                                return;
-                            }
-
-                            if (editingId) {
-
-                                setCompanies(
-                                    companies.map((d) =>
-                                        d.id === editingId
-                                            ? {
-                                                ...d,
-                                                code: companyForm.code,
-                                                name: companyForm.name,
-                                                contactPerson:
-                                                    companyForm.contactPerson,
-                                                mobile:
-                                                    companyForm.mobile,
-                                                email:
-                                                    companyForm.email,
-                                                website:
-                                                    companyForm.website,
-                                                country:
-                                                    companyForm.country,
-                                                city:
-                                                    companyForm.city,
-                                                status:
-                                                    companyForm.status,
-                                            }
-                                            : d
-                                    )
-                                );
-
-                            } else {
-
-                                setCompanies([
-                                    ...companies,
-                                    {
-                                        id: Date.now(),
-                                        code: companyForm.code,
-                                        name: companyForm.name,
-                                        contactPerson:
-                                            companyForm.contactPerson,
-                                        mobile:
-                                            companyForm.mobile,
-                                        email:
-                                            companyForm.email,
-                                        website:
-                                            companyForm.website,
-                                        country:
-                                            companyForm.country,
-                                        city:
-                                            companyForm.city,
-                                        logo: "",
-                                        references: 0,
-                                        status:
-                                            companyForm.status,
-                                    },
-                                ]);
-
-                            }
-
-                            setCompanyForm({
-                                code: "",
-                                name: "",
-                                contactPerson: "",
-                                mobile: "",
-                                email: "",
-                                website: "",
-                                country: "Bangladesh",
-                                city: "",
-                                logo: "",
-                                status: "Active",
-                            });
-
-                            try {
-
-                                if (editingId) {
-
-                                    await apiClient.put(
-                                        `/companies/${editingId}`,
-                                        {
-                                            code: companyForm.code,
-                                            name: companyForm.name,
-                                            contact_person:
-                                                companyForm.contactPerson,
-                                            mobile:
-                                                companyForm.mobile,
-                                            email:
-                                                companyForm.email,
-                                            website:
-                                                companyForm.website,
-                                            country:
-                                                companyForm.country,
-                                            city:
-                                                companyForm.city,
-                                            logo:
-                                                companyForm.logo,
-                                            is_active:
-                                                companyForm.status ===
-                                                "Active",
-                                        }
-                                    );
-
-                                    toast.success(
-                                        "Company updated successfully."
-                                    );
-
-                                } else {
-
-                                    await apiClient.post(
-                                        "/companies/",
-                                        {
-                                            code: companyForm.code,
-                                            name: companyForm.name,
-                                            contact_person:
-                                                companyForm.contactPerson,
-                                            mobile:
-                                                companyForm.mobile,
-                                            email:
-                                                companyForm.email,
-                                            website:
-                                                companyForm.website,
-                                            country:
-                                                companyForm.country,
-                                            city:
-                                                companyForm.city,
-                                            logo:
-                                                companyForm.logo,
-                                        }
-                                    );
-
-                                    toast.success(
-                                        "Company created successfully."
-                                    );
-                                }
-
-                                await loadCompanies();
-
-                                setCompanyForm({
-                                    code: "",
-                                    name: "",
-                                    contactPerson: "",
-                                    mobile: "",
-                                    email: "",
-                                    website: "",
-                                    country: "Bangladesh",
-                                    city: "",
-                                    logo: "",
-                                    status: "Active",
-                                });
-
-                                setEditingId(null);
-
-                                setShowModal(false);
-
-                            } catch (error) {
-
-                                if (
-                                    axios.isAxiosError(error)
-                                ) {
-
-                                    toast.error(
-                                        error.response?.data?.detail ||
-                                        "Operation failed."
-                                    );
-
-                                } else {
-
-                                    toast.error(
-                                        "Operation failed."
-                                    );
-                                }
-                            }
-
-                        }}
-                        className="
-                        rounded-xl
-                        bg-cyan-500
-                        px-4
-                        py-2
-                        text-xs
-                        font-medium
-                        text-black
-                        "
-                        >
-                        {editingId
-                            ? "Update Company"
-                            : "Save Company"}
-                        </button>
-
-                    </div>
-
-                </div>
-
+        )}
+
+        {/* Delete Modal */}
+        {deleteId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="w-full max-w-sm rounded-3xl border border-red-500/20 bg-[#0d1f40] p-6 shadow-[0_25px_60px_rgba(0,0,0,0.5)]">
+              <div className="mb-1 text-2xl">🗑️</div>
+              <h2 className="text-base font-bold text-white">Delete Company</h2>
+              <p className="mt-2 text-sm text-white/60">Are you sure you want to delete this company?</p>
+              <p className="mt-1 text-xs text-red-300">This action cannot be undone.</p>
+              <div className="mt-5 flex justify-end gap-2">
+                <button onClick={() => setDeleteId(null)}
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-white/60 hover:bg-white/10 transition-colors">
+                  Cancel
+                </button>
+                <button onClick={handleDelete}
+                  className="rounded-xl bg-red-500 px-4 py-2 text-xs font-semibold text-white hover:bg-red-400 transition-colors">
+                  Delete
+                </button>
+              </div>
             </div>
+          </div>
+        )}
 
-                        )}
-
-            {deleteId && (
-
-            <div
-                className="
-                fixed
-                inset-0
-                z-50
-                flex
-                items-center
-                justify-center
-                bg-black/60
-                backdrop-blur-sm
-                "
-            >
-
-                <div
-                className="
-                w-full
-                max-w-md
-                rounded-3xl
-                border
-                border-red-500/20
-                bg-[#102E67]
-                p-5
-                shadow-[0_25px_50px_rgba(0,0,0,0.45)]
-                "
-                >
-
-                <h2 className="text-lg font-semibold text-white">
-                    Delete Company
-                </h2>
-
-                <p className="mt-3 text-sm text-white/70">
-                    Are you sure you want to delete this company?
-                </p>
-
-                <p className="mt-1 text-xs text-red-300">
-                    This action cannot be undone.
-                </p>
-
-                <div className="mt-5 flex justify-end gap-2">
-
-                    <button
-                    onClick={() =>
-                        setDeleteId(null)
-                    }
-                    className="
-                    rounded-xl
-                    border
-                    border-white/10
-                    px-4
-                    py-2
-                    text-xs
-                    "
-                    >
-                    Cancel
-                    </button>
-
-                    <button
-                    onClick={async () => {
-
-                        try {
-
-                            await apiClient.delete(
-                                `/companies/${deleteId}`
-                            );
-
-                            await loadCompanies();
-
-                            toast.success(
-                                "Company deleted successfully."
-                            );
-
-                            setDeleteId(null);
-
-                        } catch (error) {
-
-                            console.error(error);
-
-                            toast.error(
-                                "Failed to delete company."
-                            );
-                        }
-                    }}
-                    className="
-                    rounded-xl
-                    bg-red-500
-                    px-4
-                    py-2
-                    text-xs
-                    font-medium
-                    text-white
-                    "
-                    >
-                    Delete
-                    </button>
-
-                </div>
-
-                </div>
-
-            </div>
-
-            )}
-
-        </section>
-
-      </div>
-
-        </main>
-  </PermissionGuard>
+      </main>
+    </PermissionGuard>
   );
 }

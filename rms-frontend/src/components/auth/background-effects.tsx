@@ -1,136 +1,108 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+
 export function BackgroundEffects() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const particles: { x: number; y: number; r: number; dx: number; dy: number; opacity: number; color: string }[] = [];
+    const colors = ["rgba(34,211,238,", "rgba(96,165,250,", "rgba(167,139,250,", "rgba(255,255,255,"];
+
+    for (let i = 0; i < 80; i++) {
+      particles.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        r: Math.random() * 1.5 + 0.3,
+        dx: (Math.random() - 0.5) * 0.3,
+        dy: (Math.random() - 0.5) * 0.3,
+        opacity: Math.random() * 0.7 + 0.1,
+        color: colors[Math.floor(Math.random() * colors.length)],
+      });
+    }
+
+    let animId: number;
+    const animate = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      particles.forEach((p) => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = `${p.color}${p.opacity})`;
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = `${p.color}0.5)`;
+        ctx.fill();
+        p.x += p.dx;
+        p.y += p.dy;
+        if (p.x < 0 || p.x > canvas.width) p.dx *= -1;
+        if (p.y < 0 || p.y > canvas.height) p.dy *= -1;
+      });
+      animId = requestAnimationFrame(animate);
+    };
+    animate();
+
+    const handleResize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      cancelAnimationFrame(animId);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, []);
+
   return (
     <>
-      {/* Base Background */}
-      <div className="absolute inset-0 bg-[#030B1F]" />
+      {/* Base */}
+      <div className="absolute inset-0 bg-[#020810]" />
 
-      {/* Main Gradient */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,rgba(59,130,246,0.35),transparent_35%),radial-gradient(circle_at_85%_10%,rgba(96,165,250,0.20),transparent_30%),radial-gradient(circle_at_80%_85%,rgba(99,102,241,0.25),transparent_35%)]" />
+      {/* Deep gradient */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_0%_0%,rgba(59,130,246,0.3),transparent_50%),radial-gradient(ellipse_at_100%_0%,rgba(99,102,241,0.2),transparent_50%),radial-gradient(ellipse_at_50%_100%,rgba(34,211,238,0.15),transparent_50%)]" />
 
-            {/* LEFT PLANET */}
-        <div
-        className="
-        absolute
-        -left-[750px]
-        top-[40px]
-        h-[1800px]
-        w-[1800px]
-        rounded-full
-        border
-        border-blue-300/15
-        bg-gradient-to-br
-        from-blue-500/50
-        via-blue-700/20
-        to-transparent
-        "
-        />
+      {/* Large ambient glow - left */}
+      <div className="absolute -left-[400px] top-[-200px] h-[900px] w-[900px] rounded-full bg-blue-600/20 blur-[120px]" />
 
-      {/* LEFT PLANET GLOW */}
-        <div
-        className="
-        absolute
-        -left-[500px]
-        top-[120px]
-        h-[1400px]
-        w-[1400px]
-        rounded-full
-        bg-blue-500/40
-        blur-[220px]
-        "
-        />
+      {/* Large ambient glow - right */}
+      <div className="absolute -right-[300px] bottom-[-200px] h-[800px] w-[800px] rounded-full bg-violet-600/20 blur-[120px]" />
 
-      {/* PLANET EDGE */}
-        <div
-        className="
-        absolute
-        -left-[680px]
-        top-[100px]
-        h-[1700px]
-        w-[1700px]
-        rounded-full
-        border
-        border-cyan-300/10
-        "
-        />
+      {/* Center glow */}
+      <div className="absolute left-1/2 top-1/2 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-500/10 blur-[150px]" />
 
-      {/* RIGHT PLANET */}
-        <div
-        className="
-        absolute
-        -right-[450px]
-        bottom-[-350px]
-        h-[1300px]
-        w-[1300px]
-        rounded-full
-        bg-gradient-to-br
-        from-violet-500/30
-        via-blue-500/20
-        to-transparent
-        blur-2xl
-        "
-        />
+      {/* Horizontal light beam */}
+      <div className="absolute left-0 top-[35%] h-[1px] w-full bg-gradient-to-r from-transparent via-cyan-400/20 to-transparent" />
+      <div className="absolute left-0 top-[65%] h-[1px] w-full bg-gradient-to-r from-transparent via-blue-400/10 to-transparent" />
 
-      {/* CENTER ATMOSPHERE */}
-        <div
-        className="
-        absolute
-        left-1/2
-        top-1/2
-        h-[1800px]
-        w-[1800px]
-        -translate-x-1/2
-        -translate-y-1/2
-        rounded-full
-        bg-blue-500/35
-        blur-[220px]
-        "
-        />
+      {/* Vertical light beam */}
+      <div className="absolute left-[30%] top-0 h-full w-[1px] bg-gradient-to-b from-transparent via-cyan-400/10 to-transparent" />
+      <div className="absolute right-[30%] top-0 h-full w-[1px] bg-gradient-to-b from-transparent via-violet-400/10 to-transparent" />
 
-      {/* LIGHT BEAM */}
-      <div
-        className="
-        absolute
-        right-0
-        top-0
-        h-full
-        w-[40%]
-        bg-gradient-to-bl
-        from-blue-300/10
-        via-transparent
-        to-transparent
-      "
-      />
+      {/* Glowing orbs */}
+      <div className="absolute left-[10%] top-[20%] h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-300 shadow-[0_0_20px_6px_rgba(34,211,238,0.8)]" />
+      <div className="absolute right-[15%] top-[15%] h-1 w-1 animate-pulse rounded-full bg-blue-300 shadow-[0_0_15px_4px_rgba(96,165,250,0.8)]" style={{animationDelay: "0.5s"}} />
+      <div className="absolute left-[60%] top-[70%] h-1.5 w-1.5 animate-pulse rounded-full bg-violet-300 shadow-[0_0_20px_6px_rgba(167,139,250,0.8)]" style={{animationDelay: "1s"}} />
+      <div className="absolute left-[25%] bottom-[25%] h-1 w-1 animate-pulse rounded-full bg-white shadow-[0_0_15px_4px_rgba(255,255,255,0.6)]" style={{animationDelay: "1.5s"}} />
+      <div className="absolute right-[35%] top-[45%] h-1 w-1 animate-pulse rounded-full bg-cyan-200 shadow-[0_0_15px_4px_rgba(34,211,238,0.6)]" style={{animationDelay: "0.8s"}} />
 
-      {/* STARS */}
-      <div className="absolute left-[12%] top-[38%] h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_40px_12px_rgba(34,211,238,0.8)]" />
+      {/* Grid overlay */}
+      <div className="absolute inset-0 opacity-[0.03] [background-image:linear-gradient(rgba(255,255,255,0.3)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.3)_1px,transparent_1px)] [background-size:60px_60px]" />
 
-      <div className="absolute left-[68%] top-[58%] h-2 w-2 rounded-full bg-blue-300 shadow-[0_0_40px_12px_rgba(96,165,250,0.8)]" />
+      {/* Animated particles canvas */}
+      <canvas ref={canvasRef} className="absolute inset-0 opacity-70" />
 
-      <div className="absolute right-[18%] top-[28%] h-2 w-2 rounded-full bg-indigo-300 shadow-[0_0_40px_12px_rgba(129,140,248,0.8)]" />
+      {/* Top vignette */}
+      <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-[#020810] to-transparent" />
 
-      <div className="absolute left-[35%] top-[18%] h-1.5 w-1.5 rounded-full bg-white shadow-[0_0_25px_6px_rgba(255,255,255,0.8)]" />
-
-      <div className="absolute right-[30%] bottom-[20%] h-1.5 w-1.5 rounded-full bg-white shadow-[0_0_25px_6px_rgba(255,255,255,0.8)]" />
-
-      {/* PREMIUM MESH */}
-      <div className="absolute bottom-[-320px] left-[-350px] opacity-80">
-        <div className="h-[1100px] w-[2400px] rounded-full border border-cyan-400/20" />
-
-        <div className="absolute left-[120px] top-[80px] h-[950px] w-[2100px] rounded-full border border-cyan-400/15" />
-
-        <div className="absolute left-[240px] top-[160px] h-[800px] w-[1800px] rounded-full border border-cyan-400/10" />
-      </div>
-
-      {/* GRID NOISE */}
-      <div
-        className="
-        absolute
-        inset-0
-        opacity-[0.05]
-        [background-image:radial-gradient(#ffffff_1px,transparent_1px)]
-        [background-size:26px_26px]
-      "
-      />
+      {/* Bottom vignette */}
+      <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-[#020810] to-transparent" />
     </>
   );
 }
