@@ -50,7 +50,12 @@ from app.modules.payment_method.routers.payment_method_router import (
 from app.modules.file.routers.file_router import (
     router as file_router,
 )
-
+from app.modules.notification.routers.notification_router import (
+    router as notification_router,
+)
+from app.modules.reports.routers.report_router import (
+    router as report_router,
+)
 from app.auth.routers import auth_router
 
 
@@ -92,6 +97,12 @@ api_v1_router.include_router(
 )
 api_v1_router.include_router(
     file_router,
+)
+api_v1_router.include_router(
+    notification_router,
+)
+api_v1_router.include_router(
+    report_router,
 )
 
 # from app.modules.uploaded_file.routers.uploaded_file_router import (

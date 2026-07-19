@@ -79,11 +79,13 @@ class ReimbursementRepository:
                     ReimbursementApplication.employee
                 ).selectinload(
                     User.designation
+                ),
+                selectinload(
+                    ReimbursementApplication.expense_type
                 )
             )
             .where(
                 ReimbursementApplication.id == application_id,
-
                 ReimbursementApplication.is_deleted
                 == False,
             )
