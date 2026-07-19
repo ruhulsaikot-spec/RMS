@@ -239,7 +239,6 @@ setSelectedExpenseTypeIds([]);
     
                             allowedActions: [
                               "APPROVE",
-                              "BACK_TO_PREVIOUS_STAGE",
                               "RETURN_TO_APPLICANT",
                               "FINAL_REJECT",
                             ],
@@ -1143,11 +1142,11 @@ setSelectedExpenseTypeIds([]);
                                   disabled: false,
                                 },
 
-                                {
+                                ...(index > 0 ? [{
                                   value: "BACK_TO_PREVIOUS_STAGE",
                                   label: "Back To Previous Stage",
-                                  disabled: index === 0,
-                                },
+                                  disabled: false,
+                                }] : []),
 
                               {
                                 value: "RETURN_TO_APPLICANT",
@@ -1512,12 +1511,10 @@ setSelectedExpenseTypeIds([]);
 
                             </div>
 
-                              <div className="mt-5">
-
+                              <div className="mt-5 hidden">
                               <label className="mb-3 block text-xs font-medium text-white/80">
                                 Approver Notifications
                               </label>
-
                               <div className="grid gap-2 md:grid-cols-3">
 
                                 {[
@@ -1628,11 +1625,11 @@ setSelectedExpenseTypeIds([]);
                             userSearch: "",
                             minApproverCount: "1",
                             actionType: "Approval",
-
                             allowedActions: [
                               "APPROVE",
                               "BACK_TO_PREVIOUS_STAGE",
                               "RETURN_TO_APPLICANT",
+                              "FINAL_REJECT",
                             ],
 
                             remarksRequired: {

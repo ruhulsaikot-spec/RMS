@@ -878,16 +878,10 @@ export default function NewClaimPage() {
                           setSaving(false);
                         }
                       }}
-                      className="
-                    rounded-xl
-                    border
-                    border-white/10
-                    px-4
-                    py-2
-                    text-sm
-                    "
+                      disabled={saving}
+                      className="rounded-xl border border-white/10 px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Save Draft
+                      {saving ? "Saving..." : "Save Draft"}
                     </button>
                     )}
 
@@ -1017,17 +1011,10 @@ export default function NewClaimPage() {
                         }
 
                       }}
-                      className="
-                    rounded-xl
-                    bg-cyan-500
-                    px-5
-                    py-2
-                    text-sm
-                    font-medium
-                    text-black
-                    "
+                      disabled={saving}
+                      className="rounded-xl bg-cyan-500 px-5 py-2 text-sm font-medium text-black disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {step === TOTAL_STEPS ? "Submit Claim" : "Next Step"}
+                      {saving && step === TOTAL_STEPS ? "Submitting..." : saving ? "Saving..." : step === TOTAL_STEPS ? "Submit Claim" : "Next Step"}
                     </button>
 
 

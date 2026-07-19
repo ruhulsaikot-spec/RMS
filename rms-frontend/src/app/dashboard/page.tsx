@@ -7,7 +7,8 @@ import {
   Clock3,
   CheckCircle,
   XCircle,
-  DollarSign,
+  Banknote,
+  ShieldCheck,
   ArrowRight,
 } from "lucide-react";
 import {
@@ -92,10 +93,13 @@ export default function DashboardPage() {
 
   // Stats from my claims
   const totalClaims = myClaims.length;
-  const pendingCount = myClaims.filter((c: any) => ["SUBMITTED", "IN_APPROVAL"].includes(c.status?.toUpperCase())).length;
-  const approvedCount = myClaims.filter((c: any) => c.status?.toUpperCase() === "APPROVED").length;
+  const pendingCount = myClaims.filter((c: any) => ["SUBMITTED", "IN_APPROVAL", "VERIFIED"].includes(c.status?.toUpperCase())).length;
+  const approvedCount = myClaims.filter((c: any) => c.status?.toUpperCase() === "PAID").length;
   const rejectedCount = myClaims.filter((c: any) => c.status?.toUpperCase() === "REJECTED").length;
-  const totalAmount = myClaims.reduce((sum: number, c: any) => sum + Number(c.requested_amount || 0), 0);
+  const verifiedCount = myClaims.filter((c: any) => c.status?.toUpperCase() === "VERIFIED").length;
+  const totalAmount = myClaims
+    .filter((c: any) => c.status?.toUpperCase() === "PAID")
+    .reduce((sum: number, c: any) => sum + Number(c.paid_amount || c.verified_amount || c.requested_amount || 0), 0);
 
   const recentClaims = [...myClaims]
     .sort((a: any, b: any) => (b.created_at || "").localeCompare(a.created_at || ""))
@@ -110,11 +114,13 @@ export default function DashboardPage() {
       const label = months[d.getMonth()];
       const amount = myClaims
         .filter((c: any) => {
-          if (!c.created_at) return false;
-          const cd = new Date(c.created_at);
-          return cd.getMonth() === d.getMonth() && cd.getFullYear() === d.getFullYear();
+          if (!c.paid_at && !c.created_at) return false;
+          const dateStr = c.paid_at || c.created_at;
+          const cd = new Date(dateStr);
+          return c.status?.toUpperCase() === "PAID" &&
+            cd.getMonth() === d.getMonth() && cd.getFullYear() === d.getFullYear();
         })
-        .reduce((sum: number, c: any) => sum + Number(c.requested_amount || 0), 0);
+        .reduce((sum: number, c: any) => sum + Number(c.paid_amount || c.verified_amount || c.requested_amount || 0), 0);
       return { month: label, amount };
     });
   };
@@ -143,7 +149,7 @@ export default function DashboardPage() {
       sub: "Awaiting approval",
     },
     {
-      label: "Approved",
+      label: "Paid",
       value: approvedCount,
       icon: CheckCircle,
       color: "green",
@@ -164,16 +170,17 @@ export default function DashboardPage() {
       hover: "hover:border-red-400/50 hover:shadow-[0_25px_60px_rgba(239,68,68,0.15)]",
       sub: "Declined requests",
     },
+    
     {
       label: "Total Amount",
       value: `৳ ${totalAmount.toLocaleString()}`,
-      icon: DollarSign,
+      icon: Banknote,
       color: "purple",
       border: "border-purple-500/20",
       iconBg: "bg-purple-500/10",
       iconColor: "text-purple-300",
       hover: "hover:border-purple-400/50 hover:shadow-[0_25px_60px_rgba(168,85,247,0.15)]",
-      sub: "Total requested",
+      sub: "Total paid amount",
       wide: true,
     },
   ];
@@ -215,7 +222,10 @@ export default function DashboardPage() {
                 >
                   <div className="flex items-center justify-between">
                     <div className={`rounded-2xl ${card.iconBg} p-3`}>
-                      <card.icon size={20} className={card.iconColor} />
+                      {card.label === "Total Amount"
+                        ? <span className={`text-lg font-bold ${card.iconColor}`}>৳</span>
+                        : <card.icon size={20} className={card.iconColor} />
+                      }
                     </div>
                   </div>
                   <p className="mt-4 text-xs font-medium text-white/60">{card.label}</p>

@@ -174,6 +174,14 @@ export default function ClaimDetailsPage() {
                   </div>
                 </div>
 
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => window.open(`/admin/reports/claim-pdf/${params.id}`, '_blank')}
+                    className="flex items-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-xs font-semibold text-cyan-300 hover:bg-cyan-500/20 transition-colors"
+                  >
+                    📄 Download PDF
+                  </button>
+                </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div className="rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-4 py-3 text-center">
                     <p className="text-xs text-white/60">Requested</p>

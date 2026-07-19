@@ -60,6 +60,8 @@ export default function Sidebar({
 
   const [collapsed, setCollapsed] =
     useState(false);
+  const [reportsOpen, setReportsOpen] =
+    useState(pathname.includes("/admin/reports"));
 
   const [organizationOpen, setOrganizationOpen] =
   useState(
@@ -323,32 +325,67 @@ const canViewConfiguration =
 
         )}
 
-        {hasPermission("Reports") && (
-
+        {/* Reports */}
+        <div className="mb-1">
           <button
-            className={`
-            mb-1
-            flex
-            w-full
-            items-center
-            gap-2.5
-            rounded-xl
-            px-3
-            py-2.5
-            text-left
-            text-sm
-            ${
+            onClick={() => setReportsOpen(!reportsOpen)}
+            className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold uppercase tracking-wider transition-colors ${
               active === "reports"
-              ? "border-l-4 border-cyan-400 bg-cyan-500/10 text-cyan-300"
-              : "text-white/70 hover:bg-white/5"
-            }
-            `}
+                ? "text-cyan-300"
+                : "text-white/40 hover:text-white/60"
+            }`}
           >
-            <BarChart3 size={18} />
-            Reports
+            <span className="flex items-center gap-2">
+              <BarChart3 size={14} />
+              Reports
+            </span>
+            <ChevronDown size={12} className={`transition-transform ${reportsOpen ? "rotate-180" : ""}`} />
           </button>
-
+          {reportsOpen && (
+            <div className="ml-3 mt-1 space-y-0.5 border-l border-white/10 pl-3">
+              <Link
+                href="/admin/reports/claims"
+                className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs ${
+                  pathname.includes("/reports/claims") ? "bg-cyan-500/10 text-cyan-300" : "text-white/60 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                Claim Summary
+              </Link>
+              <Link
+                href="/admin/reports/executive"
+                className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs ${
+                  pathname.includes("/reports/executive") ? "bg-cyan-500/10 text-cyan-300" : "text-white/60 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                Executive Report
+              </Link>
+              <Link
+                href="/admin/reports/status-summary"
+                className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs ${
+                  pathname.includes("/reports/status-summary") ? "bg-cyan-500/10 text-cyan-300" : "text-white/60 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                Status Summary
+              </Link>
+              <Link
+                href="/admin/reports/monthly-trend"
+                className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs ${
+                  pathname.includes("/reports/monthly-trend") ? "bg-cyan-500/10 text-cyan-300" : "text-white/60 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                Monthly Trend
+              </Link>
+              <Link
+                href="/admin/reports/department-wise"
+                className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs ${
+                  pathname.includes("/reports/department-wise") ? "bg-cyan-500/10 text-cyan-300" : "text-white/60 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                Department Wise
+              </Link>
+            </div>
           )}
+        </div>
 
         <div className="my-5 border-t border-white/10" />
 

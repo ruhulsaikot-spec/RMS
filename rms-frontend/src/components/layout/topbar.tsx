@@ -1,11 +1,10 @@
 "use client";
-
 import {
   LogOut,
 } from "lucide-react";
-
 import { useRouter } from "next/navigation";
 import { useUser } from "@/contexts/user-context";
+import NotificationBell from "@/components/shared/notification-bell";
 
 type TopbarProps = {
   title: string;
@@ -30,6 +29,7 @@ export default function Topbar({
   return (
     <header
       className="
+      relative
       flex
       h-16
       items-center
@@ -39,6 +39,8 @@ export default function Topbar({
       bg-white/[0.02]
       px-8
       backdrop-blur-xl
+      overflow-visible
+      z-50
       "
     >
       <div>
@@ -55,39 +57,7 @@ export default function Topbar({
 
         
         {/* Notification */}
-        <button
-          className="
-          relative
-          flex
-          h-9
-          w-9
-          items-center
-          justify-center
-          rounded-2xl
-          border
-          border-white/10
-          bg-white/[0.04]
-          backdrop-blur-xl
-          transition-all
-          duration-300
-          hover:border-cyan-400/30
-          hover:bg-white/[0.06]
-          "
-        >
-          🔔
-
-          <span
-            className="
-            absolute
-            right-2
-            top-2
-            h-2
-            w-2
-            rounded-full
-            bg-red-400
-            "
-          />
-        </button>
+        <NotificationBell />
 
         
         {/* User */}
