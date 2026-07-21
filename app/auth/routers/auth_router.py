@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,6 +45,7 @@ from app.core.database import get_db_session
 from app.core.dependencies import get_redis
 from app.core.exceptions import AuthenticationError
 from app.core.logging import get_logger
+from app.main import limiter
 
 logger = get_logger(__name__)
 
@@ -92,19 +93,39 @@ async def login(
     request: LoginRequest,
     http_request: Request,
     auth_service: AuthServiceDep,
+    response: Response,
 ) -> LoginResponse:
     """
     Authenticate user and issue JWT tokens.
-
     Returns access token (short-lived) and refresh token (long-lived)
     along with user profile information. Implements account lockout
     after consecutive failed attempts.
     """
-    return await auth_service.login(
+    result = await auth_service.login(
         request=request,
         ip_address=_client_ip(http_request),
         user_agent=_user_agent(http_request),
     )
+    # Set httpOnly cookies
+    response.set_cookie(
+        key="access_token",
+        value=result.access_token,
+        httponly=True,
+        secure=False,  # True in production with HTTPS
+        samesite="lax",
+        max_age=result.expires_in,
+        path="/",
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=result.refresh_token,
+        httponly=True,
+        secure=False,  # True in production with HTTPS
+        samesite="lax",
+        max_age=60 * 60 * 24 * 7,  # 7 days
+        path="/",
+    )
+    return result
 
 
 @router.post(
@@ -350,6 +371,39 @@ async def unlock_account(
         ip_address=_client_ip(http_request),
     )
     return {"success": True, "message": f"Account {user_id} unlocked successfully"}
+
+
+@router.post(
+    "/logout-cookie",
+    status_code=status.HTTP_200_OK,
+    summary="Logout Cookie",
+    description="Clear authentication cookies and logout.",
+)
+async def logout_cookie(
+    response: Response,
+) -> dict:
+    """Clear httpOnly cookies on logout."""
+    response.set_cookie(
+        key="access_token",
+        value="",
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        max_age=0,
+        expires=0,
+        path="/",
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value="",
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        max_age=0,
+        expires=0,
+        path="/",
+    )
+    return {"message": "Logged out successfully"}
 
 
 @router.get(

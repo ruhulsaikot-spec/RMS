@@ -18,8 +18,37 @@ from starlette.types import ASGIApp
 
 from app.core.config import settings
 from app.core.logging import bind_request_context, clear_request_context, get_logger
+from collections import defaultdict
+import asyncio
 
 logger = get_logger(__name__)
+
+# Simple in-memory rate limiter for login endpoint
+_login_attempts: dict = defaultdict(list)
+_login_lock = asyncio.Lock()
+
+class LoginRateLimitMiddleware(BaseHTTPMiddleware):
+    """Rate limit login endpoint to 5 attempts per minute per IP."""
+    
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        if request.url.path == "/api/auth/login" and request.method == "POST":
+            client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or (request.client.host if request.client else "unknown")
+            now = time.time()
+            
+            async with _login_lock:
+                # Remove attempts older than 60 seconds
+                _login_attempts[client_ip] = [t for t in _login_attempts[client_ip] if now - t < 60]
+                
+                if len(_login_attempts[client_ip]) >= 5:
+                    from fastapi.responses import JSONResponse
+                    return JSONResponse(
+                        status_code=429,
+                        content={"detail": "Too many login attempts. Please wait 1 minute and try again."}
+                    )
+                
+                _login_attempts[client_ip].append(now)
+        
+        return await call_next(request)
 
 
 # ── Request ID Middleware ─────────────────────────────────────
@@ -181,6 +210,7 @@ def register_middleware(app: FastAPI) -> None:
         app: The FastAPI application instance.
     """
     # Register custom middleware (applied LIFO, so first = outermost)
+    app.add_middleware(LoginRateLimitMiddleware)
     app.add_middleware(RequestIDMiddleware)
     app.add_middleware(RequestTimingMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
