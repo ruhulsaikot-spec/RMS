@@ -61,9 +61,12 @@ export default function ApprovalGroupsPage() {
       setApprovalGroups((prev) => prev.filter((x) => x.id !== deleteGroupId));
       toast.success("Approval group deleted successfully.");
       setDeleteGroupId(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      toast.error("Failed to delete approval group.");
+      const msg = error?.response?.data?.detail ||
+                  error?.response?.data?.message ||
+                  "Failed to delete approval group.";
+      toast.error(msg);
     } finally {
       setDeleteLoading(false);
     }

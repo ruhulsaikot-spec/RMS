@@ -105,6 +105,29 @@ class ExpenseTypeService:
                 detail="Expense Type not found",
             )
 
+        # Check if expense type is used in any expense item
+        from sqlalchemy import text as _text_et
+        linked = await db.execute(
+            _text_et("SELECT COUNT(*) FROM reimbursement_expense_items WHERE claim_type = :et_id"),
+            {"et_id": expense_type_id}
+        )
+        if linked.scalar() > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete expense type. It is linked to existing expense items.",
+            )
+
+        # Check if expense type is used in workflow
+        wf_linked = await db.execute(
+            _text_et("SELECT COUNT(*) FROM workflow_definition_expense_types WHERE expense_type_id = :et_id"),
+            {"et_id": expense_type_id}
+        )
+        if wf_linked.scalar() > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete expense type. It is assigned to existing workflows.",
+            )
+
         await ExpenseTypeRepository.delete(
             db,
             expense_type,

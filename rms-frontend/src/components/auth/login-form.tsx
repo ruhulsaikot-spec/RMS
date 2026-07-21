@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { apiClient } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/contexts/user-context";
@@ -17,10 +17,10 @@ import {
 
 export function LoginForm() {
     const router = useRouter();
-
     const { setCurrentUser } =
   useUser();
-
+  const [companyLogo, setCompanyLogo] = useState<string>("");
+  const [companyName, setCompanyName] = useState<string>("");
   const [showPassword, setShowPassword] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotStep, setForgotStep] = useState<"email" | "reset">("email");
@@ -46,6 +46,14 @@ export function LoginForm() {
     const emailInputRef = useRef<HTMLInputElement>(null);
     const passwordInputRef = useRef<HTMLInputElement>(null);
   
+  useEffect(() => {
+    apiClient.get("/companies/").then(res => {
+      const company = res.data?.[0];
+      if (company?.logo) setCompanyLogo(company.logo);
+      if (company?.name) setCompanyName(company.name);
+    }).catch(() => {});
+  }, []);
+
   const validateForm = () => {
   let isValid = true;
 

@@ -100,9 +100,12 @@ export default function ExpenseTypesPage() {
       await loadExpenseTypes();
       toast.success("Expense type deleted successfully.");
       setDeleteId(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      toast.error("Failed to delete expense type.");
+      const msg = error?.response?.data?.detail ||
+                  error?.response?.data?.message ||
+                  "Failed to delete expense type.";
+      toast.error(msg);
     }
   };
 

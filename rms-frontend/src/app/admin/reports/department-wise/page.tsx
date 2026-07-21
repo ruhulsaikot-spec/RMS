@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import Sidebar from "@/components/layout/sidebar";
 import Topbar from "@/components/layout/topbar";
+import PermissionGuard from "@/components/auth/permission-guard";
 import { apiClient } from "@/lib/api-client";
 import { expenseTypeService } from "@/services/expense-type.service";
 import { Download, Search, X } from "lucide-react";
@@ -79,6 +80,7 @@ export default function DepartmentWiseReportPage() {
   }), { total_claims: 0, total_requested: 0, total_verified: 0, total_paid: 0 });
 
   return (
+    <PermissionGuard permission="report:department_wise">
     <main className="relative flex min-h-screen overflow-hidden bg-gradient-to-b from-[#030B1F] to-[#06153C] text-white">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(59,130,246,0.35),transparent_30%),radial-gradient(circle_at_85%_15%,rgba(34,211,238,0.20),transparent_25%),radial-gradient(circle_at_80%_80%,rgba(99,102,241,0.25),transparent_30%)]" />
       <div className="relative z-10 flex min-h-screen w-full">
@@ -196,5 +198,6 @@ export default function DepartmentWiseReportPage() {
         </section>
       </div>
     </main>
+    </PermissionGuard>
   );
 }

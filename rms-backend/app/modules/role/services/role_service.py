@@ -72,6 +72,29 @@ class RoleService:
                 detail="System role cannot be deleted",
             )
 
+        # Check if role is assigned to any user
+        from sqlalchemy import text as _text_role
+        linked = await self.repo.db.execute(
+            _text_role("SELECT COUNT(*) FROM user_roles WHERE role_id = :role_id"),
+            {"role_id": role_id}
+        )
+        if linked.scalar() > 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot delete role. It is assigned to existing users.",
+            )
+
+        # Check if role is used in any workflow step
+        wf_linked = await self.repo.db.execute(
+            _text_role("SELECT COUNT(*) FROM workflow_steps WHERE role_id = :role_id"),
+            {"role_id": role_id}
+        )
+        if wf_linked.scalar() > 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot delete role. It is assigned to existing workflow steps.",
+            )
+
         await self.repo.delete(role)
 
         return {

@@ -1,7 +1,21 @@
+"use client";
 import { RMSLogo } from "./rms-logo";
 import { LoginForm } from "./login-form";
+import { useEffect, useState } from "react";
+import { apiClient } from "@/lib/api-client";
 
 export function LoginCard() {
+  const [companyLogo, setCompanyLogo] = useState<string>("");
+  const [companyName, setCompanyName] = useState<string>("");
+
+  useEffect(() => {
+    apiClient.get("/companies/").then(res => {
+      const company = res.data?.[0];
+      if (company?.logo) setCompanyLogo(company.logo);
+      if (company?.name) setCompanyName(company.name);
+    }).catch(() => {});
+  }, []);
+
   return (
     <div
     className="
@@ -65,7 +79,8 @@ export function LoginCard() {
         "
         />
 
-        <RMSLogo />
+        <RMSLogo logoUrl={companyLogo} />
+
       <LoginForm />
     </div>
   );

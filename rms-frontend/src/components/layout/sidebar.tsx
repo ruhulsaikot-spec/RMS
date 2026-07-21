@@ -326,6 +326,7 @@ const canViewConfiguration =
         )}
 
         {/* Reports */}
+        {(hasPermission("report:read") || hasPermission("report:claim_summary") || hasPermission("report:executive") || hasPermission("report:status_summary") || hasPermission("report:monthly_trend") || hasPermission("report:department_wise")) && (
         <div className="mb-1">
           <button
             onClick={() => setReportsOpen(!reportsOpen)}
@@ -343,6 +344,7 @@ const canViewConfiguration =
           </button>
           {reportsOpen && (
             <div className="ml-3 mt-1 space-y-0.5 border-l border-white/10 pl-3">
+              {hasPermission("report:claim_summary") && (
               <Link
                 href="/admin/reports/claims"
                 className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs ${
@@ -351,6 +353,8 @@ const canViewConfiguration =
               >
                 Claim Summary
               </Link>
+              )}
+              {hasPermission("report:executive") && (
               <Link
                 href="/admin/reports/executive"
                 className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs ${
@@ -359,6 +363,8 @@ const canViewConfiguration =
               >
                 Executive Report
               </Link>
+              )}
+              {hasPermission("report:status_summary") && (
               <Link
                 href="/admin/reports/status-summary"
                 className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs ${
@@ -367,6 +373,8 @@ const canViewConfiguration =
               >
                 Status Summary
               </Link>
+              )}
+              {hasPermission("report:monthly_trend") && (
               <Link
                 href="/admin/reports/monthly-trend"
                 className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs ${
@@ -375,6 +383,8 @@ const canViewConfiguration =
               >
                 Monthly Trend
               </Link>
+              )}
+              {hasPermission("report:department_wise") && (
               <Link
                 href="/admin/reports/department-wise"
                 className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs ${
@@ -383,12 +393,12 @@ const canViewConfiguration =
               >
                 Department Wise
               </Link>
+              )}
             </div>
           )}
         </div>
-
+        )}
         <div className="my-5 border-t border-white/10" />
-
         {canViewOrganization && (
           <>
           {/* Organization */}
@@ -573,20 +583,7 @@ const canViewConfiguration =
 
         <div className="mb-4">
 
-          {hasPermission("cost_center:read") && (
-          <Link
-            href="/admin/organization/cost-centers"
-            className={`mb-1 ml-6 flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm ${
-              active === "cost-centers"
-                ? "border-l-4 border-cyan-400 bg-cyan-500/15 text-cyan-300 shadow-[0_0_20px_rgba(34,211,238,0.15)]"
-                : "text-white/70 hover:bg-white/5"
-            }`}
-          >
-            <Wallet size={14} />
-            Cost Centers
-          </Link>
-          )}
-
+          
           {hasPermission("expense_type:read") && (
           <Link
             href="/admin/organization/expense-types"

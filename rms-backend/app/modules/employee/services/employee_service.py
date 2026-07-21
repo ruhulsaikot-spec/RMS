@@ -170,6 +170,33 @@ class EmployeeService:
                 detail="Employee not found",
             )
 
+        # Check if employee has linked user account
+        from sqlalchemy import text as _text_emp
+        user_linked = await db.execute(
+            _text_emp("SELECT COUNT(*) FROM users WHERE employee_id = :emp_id"),
+            {"emp_id": employee.employee_id}
+        )
+        if user_linked.scalar() > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete employee. A user account is linked to this employee.",
+            )
+
+        # Check if employee has claim applications
+        claim_linked = await db.execute(
+            _text_emp("""
+                SELECT COUNT(*) FROM reimbursement_applications ra
+                JOIN users u ON u.id = ra.employee_id
+                WHERE u.employee_id = :emp_id AND ra.is_deleted = false
+            """),
+            {"emp_id": employee.employee_id}
+        )
+        if claim_linked.scalar() > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete employee. This employee has existing claim applications.",
+            )
+
         await EmployeeRepository.delete(
             db,
             employee,

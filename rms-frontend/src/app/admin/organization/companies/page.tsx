@@ -126,9 +126,12 @@ export default function CompaniesPage() {
       await loadCompanies();
       toast.success("Company deleted successfully.");
       setDeleteId(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      toast.error("Failed to delete company.");
+      const msg = error?.response?.data?.detail ||
+                  error?.response?.data?.message ||
+                  "Failed to delete company.";
+      toast.error(msg);
     }
   };
 
@@ -306,6 +309,39 @@ export default function CompaniesPage() {
                 {field("Website", companyForm.website, "website")}
                 {field("Country", companyForm.country, "country")}
                 {field("City", companyForm.city, "city")}
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-white/60">Company Logo</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        const formData = new FormData();
+                        formData.append("file", file);
+                        const res = await apiClient.post("/files/upload", formData, {
+                          headers: { "Content-Type": "multipart/form-data" },
+                        });
+                        const storagePath = res.data?.storage_path || "";
+                        const relativePath = storagePath.replace(/.*uploads[\/\\]/, "uploads/").replace(/\\/g, "/");
+                        const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.replace("/api", "") || "http://localhost:8000";
+                        const fileUrl = `${baseUrl}/${relativePath}`;
+                        if (fileUrl) setCompanyForm({ ...companyForm, logo: fileUrl });
+                      } catch (err) {
+                        toast.error("Failed to upload logo.");
+                      }
+                    }}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none file:mr-2 file:rounded-lg file:border-0 file:bg-cyan-500/20 file:px-3 file:py-1 file:text-xs file:text-cyan-300 file:cursor-pointer"
+                  />
+                  {companyForm.logo && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <img src={companyForm.logo} alt="Logo preview" className="h-10 w-10 rounded-lg object-contain border border-white/10 bg-white/5 p-1" onError={(e) => (e.currentTarget.style.display = "none")} />
+                      <span className="text-[10px] text-white/40">Preview</span>
+                      <button onClick={() => setCompanyForm({ ...companyForm, logo: "" })} className="text-[10px] text-red-400 hover:text-red-300">Remove</button>
+                    </div>
+                  )}
+                </div>
                 <div>
                   <label className="mb-1.5 block text-xs font-medium text-white/60">Status</label>
                   <select value={companyForm.status}

@@ -15,10 +15,11 @@ import { Permission } from "@/types/permission";
 const RESOURCE_GROUPS: Record<string, string> = {
   department: "Organization", designation: "Organization", employee: "Organization",
   company: "Organization", location: "Organization", project: "Organization",
-  cost_center: "Organization", expense_type: "Organization",
+  expense_type: "Organization",
   user: "Administration", role: "Administration", permission: "Administration",
   workflow: "Administration", approval_group: "Administration",
   reimbursement: "Claims",
+  report: "Reports",
 };
 
 const GROUP_COLORS: Record<string, string> = {
@@ -28,11 +29,18 @@ const GROUP_COLORS: Record<string, string> = {
   Others: "text-white/60 border-white/20 bg-white/5",
 };
 
-const ACTIONS = ["read", "create", "update", "delete", "approve", "submit", "pay"];
+const ACTIONS = ["read", "create", "update", "delete", "approve", "submit", "pay", "claim_summary", "executive", "status_summary", "monthly_trend", "department_wise"];
 const ACTION_LABELS: Record<string, string> = {
   read: "View", create: "Add", update: "Edit", delete: "Delete",
   approve: "Approve", submit: "Submit", pay: "Pay",
+  claim_summary: "Claim Summary", executive: "Executive", status_summary: "Status Summary",
+  monthly_trend: "Monthly Trend", department_wise: "Department Wise",
 };
+const RESOURCE_ALLOWED_ACTIONS: Record<string, string[]> = {
+  report: ["claim_summary", "executive", "status_summary", "monthly_trend", "department_wise"],
+};
+const getActionsForResource = (resource: string) =>
+  RESOURCE_ALLOWED_ACTIONS[resource] || ["read", "create", "update", "delete", "approve", "submit", "pay"];
 
 const formatResourceName = (resource: string) =>
   resource.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
@@ -191,7 +199,7 @@ export default function RolePermissionsPage() {
                             <thead>
                               <tr className="border-b border-white/10 bg-white/[0.02]">
                                 <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-white/40 uppercase tracking-wide w-[160px]">Resource</th>
-                                {ACTIONS.map((action) => (
+                                {getActionsForResource(Object.keys(resources)[0] || "").map((action) => (
                                   <th key={action} className="px-3 py-2.5 text-center text-[10px] font-semibold text-white/40 uppercase tracking-wide">
                                     {ACTION_LABELS[action]}
                                   </th>
@@ -212,7 +220,7 @@ export default function RolePermissionsPage() {
                                     <td className="px-4 py-3">
                                       <span className="text-xs font-medium text-white">{formatResourceName(resource)}</span>
                                     </td>
-                                    {ACTIONS.map((action) => {
+                                    {getActionsForResource(resource).map((action) => {
                                       const permission = getPermission(action);
                                       const isChecked = permission ? selectedPermissions.includes(permission.id) : false;
                                       return (

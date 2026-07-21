@@ -120,7 +120,11 @@ export default function UsersPage() {
       toast.success("User deleted successfully.");
       setDeleteId(null);
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Failed to delete user");
+      const msg = error?.response?.data?.detail || 
+                  error?.response?.data?.error?.detail || 
+                  error?.response?.data?.message || 
+                  "Failed to delete user";
+      toast.error(msg);
     }
   };
 

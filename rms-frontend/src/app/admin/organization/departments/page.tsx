@@ -109,12 +109,14 @@ export default function DepartmentsPage() {
       await loadDepartments();
       toast.success("Department deleted successfully.");
       setDeleteId(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      toast.error("Failed to delete department.");
+      const msg = error?.response?.data?.detail ||
+                  error?.response?.data?.message ||
+                  "Failed to delete department.";
+      toast.error(msg);
     }
   };
-
   return (
     <PermissionGuard permission="department:read">
       <main className="relative flex min-h-screen overflow-hidden bg-gradient-to-b from-[#030B1F] to-[#06153C] text-white">

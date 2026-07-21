@@ -91,6 +91,18 @@ class CompanyService:
                 detail="Company not found",
             )
 
+        # Check if company is linked to any employee
+        from sqlalchemy import text as _text_comp
+        emp_linked = await db.execute(
+            _text_comp("SELECT COUNT(*) FROM employees WHERE company_id = :comp_id"),
+            {"comp_id": company_id}
+        )
+        if emp_linked.scalar() > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete company. It is assigned to existing employees.",
+            )
+
         await CompanyRepository.delete(
             db,
             company,

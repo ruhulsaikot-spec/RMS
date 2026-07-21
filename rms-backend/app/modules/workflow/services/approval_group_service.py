@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from fastapi import HTTPException
 from app.core.exceptions.http_exceptions import (
     NotFoundException,
 )
@@ -260,6 +260,18 @@ class ApprovalGroupService:
         if not approval_group:
             raise NotFoundException(
                 "Approval Group not found"
+            )
+
+        # Check if approval group is used in any workflow step
+        from sqlalchemy import text as _text_ag
+        linked = await db.execute(
+            _text_ag("SELECT COUNT(*) FROM workflow_steps WHERE approval_group_id = :group_id"),
+            {"group_id": approval_group_id}
+        )
+        if linked.scalar() > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete approval group. It is assigned to existing workflow steps.",
             )
 
         return await ApprovalGroupRepository.delete_approval_group(

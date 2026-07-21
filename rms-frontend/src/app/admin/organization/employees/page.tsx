@@ -153,12 +153,14 @@ export default function EmployeesPage() {
       await loadEmployees();
       toast.success("Employee deleted successfully.");
       setDeleteId(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      toast.error("Failed to delete employee.");
+      const msg = error?.response?.data?.detail ||
+                  error?.response?.data?.message ||
+                  "Failed to delete employee.";
+      toast.error(msg);
     }
   };
-
   const field = (label: string, key: string, required = false, type = "text") => (
     <div>
       <label className="mb-1.5 block text-xs font-medium text-white/60">

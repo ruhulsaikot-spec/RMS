@@ -114,12 +114,15 @@ export default function RolesPage() {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!response.ok) throw new Error();
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData?.detail || "Failed to delete role.");
+      }
       await loadRoles();
       toast.success("Role deleted successfully.");
       setDeleteId(null);
-    } catch {
-      toast.error("Failed to delete role.");
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to delete role.");
     }
   };
 

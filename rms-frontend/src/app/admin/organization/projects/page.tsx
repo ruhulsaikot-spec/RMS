@@ -100,9 +100,12 @@ export default function ProjectsPage() {
       await loadProjects();
       toast.success("Project deleted successfully.");
       setDeleteId(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      toast.error("Failed to delete project.");
+      const msg = error?.response?.data?.detail ||
+                  error?.response?.data?.message ||
+                  "Failed to delete project.";
+      toast.error(msg);
     }
   };
 

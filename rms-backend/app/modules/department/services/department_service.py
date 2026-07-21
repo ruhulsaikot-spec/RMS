@@ -82,6 +82,29 @@ class DepartmentService:
                 detail="Department not found",
             )
 
+        # Check if department is linked to any employee
+        from sqlalchemy import text as _text_dept
+        emp_linked = await db.execute(
+            _text_dept("SELECT COUNT(*) FROM employees WHERE department_id = :dept_id"),
+            {"dept_id": department_id}
+        )
+        if emp_linked.scalar() > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete department. It is assigned to existing employees.",
+            )
+
+        # Check if department is linked to any user
+        user_linked = await db.execute(
+            _text_dept("SELECT COUNT(*) FROM users WHERE department_id = :dept_id"),
+            {"dept_id": department_id}
+        )
+        if user_linked.scalar() > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete department. It is assigned to existing users.",
+            )
+
         await DepartmentRepository.delete(
             db,
             department,

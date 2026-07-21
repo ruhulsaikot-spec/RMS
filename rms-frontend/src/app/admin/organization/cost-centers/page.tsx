@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Search, Plus, LayoutGrid, X } from "lucide-react";
 import Sidebar from "@/components/layout/sidebar";
@@ -16,6 +17,9 @@ const selectClass = "w-full rounded-xl border border-white/10 bg-[#0d1f40] px-3 
 const emptyForm = { code: "", name: "", status: "Active" };
 
 export default function CostCentersPage() {
+  const router = useRouter();
+  useEffect(() => { router.replace("/dashboard"); }, []);
+  return null;
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);

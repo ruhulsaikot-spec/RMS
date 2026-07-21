@@ -88,6 +88,18 @@ class LocationService:
                 detail="Location not found",
             )
 
+        # Check if location is linked to any employee
+        from sqlalchemy import text as _text_loc
+        emp_linked = await db.execute(
+            _text_loc("SELECT COUNT(*) FROM employees WHERE location_id = :loc_id"),
+            {"loc_id": location_id}
+        )
+        if emp_linked.scalar() > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete location. It is assigned to existing employees.",
+            )
+
         await LocationRepository.delete(
             db,
             location,

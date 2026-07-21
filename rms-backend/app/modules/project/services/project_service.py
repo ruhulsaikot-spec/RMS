@@ -105,6 +105,20 @@ class ProjectService:
                 detail="Project not found",
             )
 
+        # Check if project is linked to any expense items
+        from sqlalchemy import select as _sel_pr, func
+        from app.modules.reimbursement.models.reimbursement import ReimbursementExpenseItem
+        linked = await db.execute(
+            _sel_pr(func.count()).select_from(ReimbursementExpenseItem).where(
+                ReimbursementExpenseItem.project == project_id
+            )
+        )
+        if linked.scalar() > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete project. It is linked to existing expense items.",
+            )
+
         await ProjectRepository.delete(
             db,
             project,

@@ -1,6 +1,5 @@
 import Image from "next/image";
-
-export function RMSLogo() {
+export function RMSLogo({ logoUrl }: { logoUrl?: string }) {
   return (
     <div className="text-center">
       {/* Logo */}
@@ -24,7 +23,21 @@ export function RMSLogo() {
             blur-[75px]
           "
           />
-
+          {logoUrl ? (
+            <img
+              src={logoUrl}
+              alt="Company Logo"
+              width={80}
+              height={80}
+              className="
+                relative
+                z-10
+                rounded-3xl
+                object-contain
+                shadow-[0_0_60px_rgba(34,211,238,0.45)]
+              "
+            />
+          ) : (
           <Image
             src="/logo.png"
             alt="RMS Logo"
@@ -38,6 +51,7 @@ export function RMSLogo() {
             "
             priority
           />
+          )}
         </div>
       </div>
 

@@ -82,6 +82,29 @@ class DesignationService:
                 detail="Designation not found",
             )
 
+        # Check if designation is linked to any employee
+        from sqlalchemy import text as _text_desig
+        emp_linked = await db.execute(
+            _text_desig("SELECT COUNT(*) FROM employees WHERE designation_id = :desig_id"),
+            {"desig_id": designation_id}
+        )
+        if emp_linked.scalar() > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete designation. It is assigned to existing employees.",
+            )
+
+        # Check if designation is linked to any user
+        user_linked = await db.execute(
+            _text_desig("SELECT COUNT(*) FROM users WHERE designation_id = :desig_id"),
+            {"desig_id": designation_id}
+        )
+        if user_linked.scalar() > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete designation. It is assigned to existing users.",
+            )
+
         await DesignationRepository.delete(
             db,
             designation,

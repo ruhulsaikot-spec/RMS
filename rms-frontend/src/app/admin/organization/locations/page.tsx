@@ -109,12 +109,14 @@ export default function LocationsPage() {
       await loadLocations();
       toast.success("Location deleted successfully.");
       setDeleteId(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      toast.error("Failed to delete location.");
+      const msg = error?.response?.data?.detail ||
+                  error?.response?.data?.message ||
+                  "Failed to delete location.";
+      toast.error(msg);
     }
   };
-
   return (
     <PermissionGuard permission="location:read">
       <main className="relative flex min-h-screen overflow-hidden bg-gradient-to-b from-[#030B1F] to-[#06153C] text-white">

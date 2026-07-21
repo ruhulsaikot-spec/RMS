@@ -44,7 +44,18 @@ export default function RootLayout({
           
 
               {children}
-
+              <footer className="border-t border-white/5 bg-[#030B1F] py-2 text-center">
+                <p className="text-[10px] text-white/30">
+                  Developed by{" "}
+                  <a href="https://www.wyzetechltd.com/" target="_blank" rel="noopener noreferrer" className="text-cyan-400/60 hover:text-cyan-400 transition-colors">
+                    Wyze Tech Ltd
+                  </a>
+                  {" "}|{" "}
+                  <a href="mailto:info@wyzetechltd.com" className="text-cyan-400/60 hover:text-cyan-400 transition-colors">
+                    info@wyzetechltd.com
+                  </a>
+                </p>
+              </footer>
               <Toaster
                 position="top-center"
                 richColors

@@ -9,6 +9,7 @@ from app.modules.workflow.schemas.workflow_schema import (
 from app.core.exceptions.http_exceptions import (
     NotFoundException,
 )
+from fastapi import HTTPException
 from app.modules.expense_type.models.expense_type import ExpenseType
 
 from app.modules.workflow.models.workflow import (
@@ -305,6 +306,21 @@ class WorkflowService:
         if not workflow_definition:
             raise NotFoundException(
                 "Workflow Definition not found"
+            )
+
+        # Check if workflow is used in any active application
+        from sqlalchemy import select as _sel_wf, func
+        from app.modules.reimbursement.models.reimbursement import ReimbursementApplication
+        linked = await db.execute(
+            _sel_wf(func.count()).select_from(ReimbursementApplication).where(
+                ReimbursementApplication.workflow_definition_id == workflow_definition_id,
+                ReimbursementApplication.is_deleted == False,
+            )
+        )
+        if linked.scalar() > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete workflow. It is linked to existing claim applications.",
             )
 
         return await WorkflowRepository.delete_workflow_definition(

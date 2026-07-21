@@ -228,12 +228,37 @@ class UserService:
                 "Super Admin cannot be deleted"
             )
 
-        user.deleted_by = current_user_id
+        # Check if user has linked data
+        from sqlalchemy import select as _sel_del, func
+        from app.modules.reimbursement.models.reimbursement import ReimbursementApplication, ReimbursementApproval
 
-        return await UserRepository.soft_delete(
-            db,
-            user,
+        # Check claims
+        claim_count = await db.execute(
+            _sel_del(func.count()).select_from(ReimbursementApplication).where(
+                ReimbursementApplication.employee_id == user_id,
+                ReimbursementApplication.is_deleted == False
+            )
         )
+        if claim_count.scalar() > 0:
+            raise ConflictError(
+                "Cannot delete user. This user has existing claim applications."
+            )
+
+        # Check approvals
+        approval_count = await db.execute(
+            _sel_del(func.count()).select_from(ReimbursementApproval).where(
+                ReimbursementApproval.action_by == user_id
+            )
+        )
+        if approval_count.scalar() > 0:
+            raise ConflictError(
+                "Cannot delete user. This user has existing approval records."
+            )
+
+        # Hard delete
+        await db.delete(user)
+        await db.commit()
+        return {"message": "User deleted successfully"}
 
       
 
