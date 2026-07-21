@@ -1,0 +1,22 @@
+from app.core.exceptions.http_exceptions import (
+    NotFoundException,
+)
+
+from app.core.exceptions.handlers import (
+    register_exception_handlers,
+)
+
+from app.core.exceptions.custom_exceptions import (
+    AuthenticationError,
+    AuthorizationError,
+)
+
+# Temporary compatibility exceptions
+class ValidationError(Exception):
+    pass
+
+class ConflictError(Exception):
+    pass
+
+class NotFoundError(Exception):
+    pass

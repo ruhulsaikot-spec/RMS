@@ -1,0 +1,415 @@
+"""
+RMS Backend - Redis Token Blacklist & Session Management
+
+Token blacklist for logout/revocation and session management
+for concurrent session tracking, both backed by Redis.
+"""
+
+from __future__ import annotations
+
+import json
+import uuid
+from datetime import datetime, timezone
+from typing import Any
+
+from redis.asyncio import Redis
+
+from app.auth.security_config import security_settings
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+# ══════════════════════════════════════════════════════════════
+# TOKEN BLACKLIST
+# ══════════════════════════════════════════════════════════════
+class TokenBlacklist:
+    """
+    Redis-backed JWT token blacklist for logout and revocation.
+
+    When a user logs out or a token is revoked, the token's JTI
+    is stored in Redis with a TTL matching the token's remaining
+    lifetime. This ensures the blacklist entry is automatically
+    cleaned up after the token would have expired anyway.
+
+    Supports both access tokens (short TTL) and refresh tokens
+    (longer TTL) with separate key prefixes for efficient scanning.
+    """
+
+    def __init__(self, redis: Redis) -> None:
+        self.redis = redis
+
+    async def blacklist_access_token(
+        self, jti: str, user_id: str, expires_in_seconds: int | None = None
+    ) -> None:
+        """
+        Add an access token JTI to the blacklist.
+
+        Args:
+            jti: Token JTI (unique identifier).
+            user_id: User ID who owns the token.
+            expires_in_seconds: TTL in seconds. Defaults to access token expiry.
+        """
+        ttl = expires_in_seconds or security_settings.access_token_ttl_seconds
+        key = f"{security_settings.blacklist_key_prefix}{jti}"
+        value = json.dumps({
+            "user_id": user_id,
+            "revoked_at": datetime.now(timezone.utc).isoformat(),
+            "type": "access",
+        })
+        await self.redis.setex(key, ttl, value)
+        logger.info("access_token_blacklisted", jti=jti, user_id=user_id, ttl=ttl)
+
+    async def blacklist_refresh_token(
+        self, jti: str, user_id: str, expires_in_seconds: int | None = None
+    ) -> None:
+        """
+        Add a refresh token JTI to the blacklist.
+
+        Args:
+            jti: Token JTI (unique identifier).
+            user_id: User ID who owns the token.
+            expires_in_seconds: TTL in seconds. Defaults to refresh token expiry.
+        """
+        ttl = expires_in_seconds or security_settings.refresh_token_ttl_seconds
+        key = f"{security_settings.blacklist_key_prefix}refresh:{jti}"
+        value = json.dumps({
+            "user_id": user_id,
+            "revoked_at": datetime.now(timezone.utc).isoformat(),
+            "type": "refresh",
+        })
+        await self.redis.setex(key, ttl, value)
+        logger.info("refresh_token_blacklisted", jti=jti, user_id=user_id, ttl=ttl)
+
+    async def is_blacklisted(self, jti: str, token_type: str = "access") -> bool:
+        """
+        Check if a token JTI has been blacklisted.
+
+        Args:
+            jti: Token JTI to check.
+            token_type: "access" or "refresh".
+
+        Returns:
+            True if the token is in the blacklist.
+        """
+        if token_type == "refresh":
+            key = f"{security_settings.blacklist_key_prefix}refresh:{jti}"
+        else:
+            key = f"{security_settings.blacklist_key_prefix}{jti}"
+        return await self.redis.exists(key) > 0
+
+    async def blacklist_all_user_tokens(self, user_id: str) -> int:
+        """
+        Blacklist all active tokens for a user (force logout everywhere).
+
+        Uses a user-level blacklist key that the token validation
+        checks in addition to individual JTI blacklists.
+
+        Args:
+            user_id: User ID whose tokens should be revoked.
+
+        Returns:
+            Number of sessions revoked.
+        """
+        key = f"{security_settings.blacklist_key_prefix}user:{user_id}"
+        value = json.dumps({
+            "revoked_at": datetime.now(timezone.utc).isoformat(),
+            "reason": "force_logout_all",
+        })
+        # TTL = max of access + refresh token lifetimes
+        ttl = security_settings.refresh_token_ttl_seconds
+        await self.redis.setex(key, ttl, value)
+
+        # Also invalidate all sessions
+        session_count = await self._delete_all_user_sessions(user_id)
+        logger.info("all_tokens_blacklisted", user_id=user_id, sessions_revoked=session_count)
+        return session_count
+
+    async def is_user_blacklisted(self, user_id: str) -> bool:
+        """Check if all tokens for a user have been revoked (force logout)."""
+        key = f"{security_settings.blacklist_key_prefix}user:{user_id}"
+        return await self.redis.exists(key) > 0
+
+    async def _delete_all_user_sessions(self, user_id: str) -> int:
+        """Delete all session keys for a user."""
+        pattern = f"{security_settings.session_key_prefix}{user_id}:*"
+        keys = []
+        async for key in self.redis.scan_iter(match=pattern):
+            keys.append(key)
+        if keys:
+            await self.redis.delete(*keys)
+        return len(keys)
+
+
+# ══════════════════════════════════════════════════════════════
+# SESSION MANAGEMENT
+# ══════════════════════════════════════════════════════════════
+class SessionManager:
+    """
+    Redis-backed session management for concurrent session tracking.
+
+    Tracks active user sessions with metadata (IP, user agent,
+    creation time, last activity). Enforces maximum concurrent
+    session limits per user with FIFO eviction.
+    """
+
+    def __init__(self, redis: Redis) -> None:
+        self.redis = redis
+
+    async def create_session(
+        self,
+        user_id: str,
+        refresh_jti: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> str:
+        """
+        Create a new user session in Redis.
+
+        Args:
+            user_id: User ID.
+            refresh_jti: Refresh token JTI for this session.
+            ip_address: Client IP address.
+            user_agent: Client User-Agent string.
+
+        Returns:
+            Session ID.
+        """
+        session_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+
+        session_data = json.dumps({
+            "session_id": session_id,
+            "user_id": user_id,
+            "refresh_jti": refresh_jti,
+            "ip_address": ip_address,
+            "user_agent": user_agent,
+            "created_at": now,
+            "last_activity": now,
+        })
+
+        # Store session with refresh token TTL
+        key = f"{security_settings.session_key_prefix}{user_id}:{session_id}"
+        ttl = security_settings.refresh_token_ttl_seconds
+        await self.redis.setex(key, ttl, session_data)
+
+        # Enforce max concurrent sessions
+        await self._enforce_session_limit(user_id)
+
+        # Store refresh token -> session mapping
+        rt_key = f"{security_settings.refresh_token_key_prefix}{refresh_jti}"
+        await self.redis.setex(rt_key, ttl, json.dumps({
+            "user_id": user_id,
+            "session_id": session_id,
+        }))
+
+        logger.info("session_created", user_id=user_id, session_id=session_id)
+        return session_id
+
+    async def get_session(self, user_id: str, session_id: str) -> dict[str, Any] | None:
+        """Get session data by user ID and session ID."""
+        key = f"{security_settings.session_key_prefix}{user_id}:{session_id}"
+        data = await self.redis.get(key)
+        if data:
+            return json.loads(data)
+        return None
+
+    async def get_active_sessions(self, user_id: str) -> list[dict[str, Any]]:
+        """
+        Get all active sessions for a user.
+
+        Returns:
+            List of session data dictionaries.
+        """
+        pattern = f"{security_settings.session_key_prefix}{user_id}:*"
+        sessions = []
+        async for key in self.redis.scan_iter(match=pattern):
+            data = await self.redis.get(key)
+            if data:
+                sessions.append(json.loads(data))
+        # Sort by creation time (newest first)
+        sessions.sort(key=lambda s: s.get("created_at", ""), reverse=True)
+        return sessions
+
+    async def update_session_activity(self, user_id: str, session_id: str) -> None:
+        """Update the last activity timestamp for a session."""
+        key = f"{security_settings.session_key_prefix}{user_id}:{session_id}"
+        data = await self.redis.get(key)
+        if data:
+            session = json.loads(data)
+            session["last_activity"] = datetime.now(timezone.utc).isoformat()
+            ttl = await self.redis.ttl(key)
+            if ttl > 0:
+                await self.redis.setex(key, ttl, json.dumps(session))
+
+    async def delete_session(self, user_id: str, session_id: str) -> bool:
+        """
+        Delete a specific session.
+
+        Returns:
+            True if the session was found and deleted.
+        """
+        key = f"{security_settings.session_key_prefix}{user_id}:{session_id}"
+        # Also clean up the refresh token mapping
+        data = await self.redis.get(key)
+        if data:
+            session = json.loads(data)
+            rt_key = f"{security_settings.refresh_token_key_prefix}{session.get('refresh_jti', '')}"
+            await self.redis.delete(rt_key)
+
+        result = await self.redis.delete(key)
+        logger.info("session_deleted", user_id=user_id, session_id=session_id)
+        return result > 0
+
+    async def delete_session_by_refresh_jti(self, user_id: str, refresh_jti: str) -> bool:
+        """Delete a session by its associated refresh token JTI."""
+        rt_key = f"{security_settings.refresh_token_key_prefix}{refresh_jti}"
+        data = await self.redis.get(rt_key)
+        if data:
+            mapping = json.loads(data)
+            session_id = mapping.get("session_id")
+            if session_id:
+                return await self.delete_session(user_id, session_id)
+        return False
+
+    async def get_session_count(self, user_id: str) -> int:
+        """Get the count of active sessions for a user."""
+        pattern = f"{security_settings.session_key_prefix}{user_id}:*"
+        count = 0
+        async for _ in self.redis.scan_iter(match=pattern):
+            count += 1
+        return count
+
+    async def _enforce_session_limit(self, user_id: str) -> None:
+        """
+        Evict oldest sessions if user exceeds max concurrent sessions.
+
+        Uses FIFO (First In, First Out) strategy: the oldest session
+        is deleted when the limit is reached.
+        """
+        sessions = await self.get_active_sessions(user_id)
+        max_sessions = security_settings.max_concurrent_sessions
+
+        while len(sessions) >= max_sessions:
+            oldest = sessions[-1]  # Sorted newest-first
+            oldest_session_id = oldest.get("session_id")
+            if oldest_session_id:
+                await self.delete_session(user_id, oldest_session_id)
+                logger.info(
+                    "session_evicted",
+                    user_id=user_id,
+                    session_id=oldest_session_id,
+                    reason="max_sessions_exceeded",
+                )
+            sessions.pop()
+
+
+# ══════════════════════════════════════════════════════════════
+# FAILED LOGIN TRACKER
+# ══════════════════════════════════════════════════════════════
+class FailedLoginTracker:
+    """
+    Redis-backed failed login attempt tracking for account lockout.
+
+    Tracks consecutive failed login attempts per email/IP with
+    configurable window and lockout duration.
+    """
+
+    def __init__(self, redis: Redis) -> None:
+        self.redis = redis
+
+    async def record_failed_attempt(self, email: str) -> int:
+        """
+        Record a failed login attempt and return the current count.
+
+        Args:
+            email: Email address of the failed login.
+
+        Returns:
+            Current count of failed attempts within the window.
+        """
+        key = f"{security_settings.failed_attempts_key_prefix}{email}"
+        count = await self.redis.incr(key)
+
+        if count == 1:
+            # Set TTL on first failure (window duration)
+            await self.redis.expire(key, security_settings.failed_attempt_window_seconds)
+
+        logger.info("failed_login_recorded", email=email, count=count)
+        return count
+
+    async def get_failed_attempts(self, email: str) -> int:
+        """Get the current failed attempt count for an email."""
+        key = f"{security_settings.failed_attempts_key_prefix}{email}"
+        count = await self.redis.get(key)
+        return int(count) if count else 0
+
+    async def reset_failed_attempts(self, email: str) -> None:
+        """Reset the failed attempt counter after successful login."""
+        key = f"{security_settings.failed_attempts_key_prefix}{email}"
+        await self.redis.delete(key)
+
+    async def is_locked_out(self, email: str) -> tuple[bool, int | None]:
+        """
+        Check if an email is currently locked out.
+
+        Returns:
+            Tuple of (is_locked, remaining_seconds).
+        """
+        key = f"{security_settings.failed_attempts_key_prefix}lock:{email}"
+        ttl = await self.redis.ttl(key)
+        if ttl > 0:
+            return True, ttl
+        return False, None
+
+    async def lock_account(self, email: str) -> None:
+        """
+        Set a lockout for an email address.
+
+        Args:
+            email: Email to lock.
+        """
+        key = f"{security_settings.failed_attempts_key_prefix}lock:{email}"
+        await self.redis.setex(key, security_settings.lockout_ttl_seconds, "locked")
+        logger.warning("account_locked", email=email, duration_minutes=security_settings.lockout_duration_minutes)
+
+
+# ══════════════════════════════════════════════════════════════
+# PASSWORD RESET TOKEN STORE
+# ══════════════════════════════════════════════════════════════
+class PasswordResetStore:
+    """Redis-backed password reset token storage with TTL."""
+
+    def __init__(self, redis: Redis) -> None:
+        self.redis = redis
+
+    async def store_reset_token(self, user_id: str, token_jti: str) -> None:
+        """Store a password reset token in Redis."""
+        key = f"{security_settings.password_reset_key_prefix}{token_jti}"
+        ttl = security_settings.password_reset_token_expire_minutes * 60
+        await self.redis.setex(key, ttl, json.dumps({
+            "user_id": user_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "used": False,
+        }))
+
+    async def verify_reset_token(self, token_jti: str) -> dict[str, Any] | None:
+        """Verify and return password reset token data."""
+        key = f"{security_settings.password_reset_key_prefix}{token_jti}"
+        data = await self.redis.get(key)
+        if data:
+            token_data = json.loads(data)
+            if not token_data.get("used"):
+                return token_data
+        return None
+
+    async def consume_reset_token(self, token_jti: str) -> None:
+        """Mark a password reset token as used (one-time use)."""
+        key = f"{security_settings.password_reset_key_prefix}{token_jti}"
+        data = await self.redis.get(key)
+        if data:
+            token_data = json.loads(data)
+            token_data["used"] = True
+            ttl = await self.redis.ttl(key)
+            if ttl > 0:
+                await self.redis.setex(key, ttl, json.dumps(token_data))
