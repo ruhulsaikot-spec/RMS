@@ -1,0 +1,377 @@
+"use client";
+
+import Sidebar from "@/components/layout/sidebar";
+import Topbar from "@/components/layout/topbar";
+import {
+  CheckCircle2,
+  Circle,
+  Clock3,
+} from "lucide-react";
+
+export default function ClaimDetailsPage() {
+  return (
+    <main className="relative flex min-h-screen overflow-hidden bg-gradient-to-b from-[#030B1F] to-[#06153C] text-white">
+
+      {/* Background Glow */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(59,130,246,0.35),transparent_30%),radial-gradient(circle_at_85%_15%,rgba(34,211,238,0.20),transparent_25%),radial-gradient(circle_at_80%_80%,rgba(99,102,241,0.25),transparent_30%),radial-gradient(circle_at_50%_50%,rgba(37,99,235,0.12),transparent_50%)]" />
+
+      {/* Atmosphere */}
+      <div
+        className="
+        absolute
+        left-1/2
+        top-1/2
+        h-[1800px]
+        w-[1800px]
+        -translate-x-1/2
+        -translate-y-1/2
+        rounded-full
+        bg-cyan-500/10
+        blur-[260px]
+        "
+      />
+
+      <div className="relative z-10 flex min-h-screen w-full">
+
+        <Sidebar active="claims" />
+
+        <section className="flex-1 flex flex-col">
+
+          <Topbar
+            title="Claim Details"
+            subtitle="View reimbursement application details"
+          />
+
+          {/* Body */}
+          <div
+            className="
+            flex-1
+            p-5
+            bg-[linear-gradient(180deg,#081B44_0%,#0A2558_50%,#10306D_100%)]
+            "
+          >
+            {/* Hero Card */}
+            <div
+              className="
+              rounded-3xl
+              border
+              border-white/20
+              bg-[#102E67]/80
+              backdrop-blur-2xl
+              shadow-2xl
+              shadow-black/30
+              p-4
+              "
+            >
+
+              <div className="flex items-start justify-between">
+
+                <div>
+
+                  <button
+                    className="
+                    mb-2
+                    text-sm
+                    text-cyan-300
+                    hover:text-cyan-200
+                    "
+                    >
+                    ← Back to Claims
+                    </button>
+
+                    <h1
+                    className="
+                    text-3xl
+                    font-bold
+                    text-white
+                    "
+                    >
+                    Claim-2026-001
+                    </h1>
+
+                    <p
+                    className="
+                    mt-2
+                    text-blue-100/80
+                    "
+                    >
+                    Travel Reimbursement
+                    </p>
+
+                  <div
+                    className="
+                    mt-3
+                    inline-flex
+                    items-center
+                    gap-2
+                    rounded-full
+                    border
+                    border-purple-400/30
+                    bg-purple-500/15
+                    px-4
+                    py-2
+                    text-sm
+                    font-medium
+                    text-purple-300
+                    "
+                  >
+                    <span className="h-2 w-2 rounded-full bg-purple-300" />
+                    Finance Review
+                  </div>
+
+                </div>
+
+                <div
+                  className="
+                  min-w-[220px]
+                  rounded-3xl
+                  border
+                  border-cyan-400/20
+                  bg-cyan-500/10
+                  px-8
+                  py-6
+                  text-center
+                  "
+                >
+                  <p className="text-sm text-blue-100/60">
+                    Claim Amount
+                  </p>
+
+                  <h2
+                    className="
+                    mt-2
+                    text-2xl
+                    font-bold
+                    text-cyan-300
+                    "
+                  >
+                    ৳15,000
+                  </h2>
+                </div>
+
+              </div>
+
+            </div>            
+
+          {/* Main Content Grid */}
+
+        <div className="mt-5 space-y-4">
+
+        {/* Row 1 */}
+
+        <div className="grid grid-cols-12 gap-4">
+
+            {/* Expense Breakdown */}
+
+            <div className="col-span-8 rounded-3xl border border-white/20 bg-[#102E67]/80 p-4">
+
+            <h2 className="mb-4 text-lg font-bold text-white">
+                Expense Breakdown
+            </h2>
+
+            <table className="w-full">
+                <thead>
+                <tr className="border-b border-white/10">
+                    <th className="pb-3 text-left text-xs uppercase text-cyan-200/80">
+                    Date
+                    </th>
+
+                    <th className="pb-3 text-left text-xs uppercase text-cyan-200/80">
+                    Description
+                    </th>
+
+                    <th className="pb-3 text-right text-xs uppercase text-cyan-200/80">
+                    Amount
+                    </th>
+                </tr>
+                </thead>
+
+                <tbody>
+
+                <tr className="border-b border-white/10">
+                    <td className="py-3 text-white">01 Jun 2026</td>
+                    <td className="py-3 text-white">Hotel Accommodation</td>
+                    <td className="py-3 text-right text-cyan-300">৳10,000</td>
+                </tr>
+
+                <tr className="border-b border-white/10">
+                    <td className="py-3 text-white">02 Jun 2026</td>
+                    <td className="py-3 text-white">Transportation</td>
+                    <td className="py-3 text-right text-cyan-300">৳3,000</td>
+                </tr>
+
+                <tr>
+                    <td className="py-3 text-white">02 Jun 2026</td>
+                    <td className="py-3 text-white">Meals</td>
+                    <td className="py-3 text-right text-cyan-300">৳2,000</td>
+                </tr>
+
+                <tr className="border-t border-white/10">
+                    <td colSpan={2} className="pt-4 text-right font-semibold text-white">
+                    Total Amount
+                    </td>
+
+                    <td className="pt-4 text-right text-xl font-bold text-cyan-300">
+                    ৳15,000
+                    </td>
+                </tr>
+
+                </tbody>
+            </table>
+
+            </div>
+
+            {/* Claim Information */}
+
+            <div className="col-span-4 rounded-3xl border border-white/20 bg-[#102E67]/80 p-4">
+
+            <h2 className="mb-4 text-lg font-bold text-white">
+                Claim Information
+            </h2>
+
+            <div className="grid grid-cols-2 gap-4">
+
+                <div>
+                <p className="text-sm text-white/60">Employee</p>
+                <p className="text-white">John Doe</p>
+                </div>
+
+                <div>
+                <p className="text-sm text-white/60">Department</p>
+                <p className="text-white">Finance Department</p>
+                </div>
+
+                <div>
+                <p className="text-sm text-white/60">Position</p>
+                <p className="text-white">Senior Executive</p>
+                </div>
+
+                <div>
+                <p className="text-sm text-white/60">Claim Type</p>
+                <p className="text-white">Travel Reimbursement</p>
+                </div>
+
+                <div>
+                <p className="text-sm text-white/60">Submission Date</p>
+                <p className="text-white">01 Jun 2026</p>
+                </div>
+
+            </div>
+
+            </div>
+
+        </div>
+
+        {/* Row 2 */}
+
+        <div className="grid grid-cols-12 gap-4">
+
+            <div className="col-span-8 rounded-3xl border border-white/20 bg-[#102E67]/80 p-4">
+
+            <h2 className="mb-4 text-lg font-bold text-white">
+                Approval Actions
+            </h2>
+
+            <textarea
+                rows={4}
+                placeholder="Add approval or rejection comments..."
+                className="w-full rounded-2xl border border-white/10 bg-white/5 p-4 text-white"
+            />
+
+            <div className="mt-4 flex gap-3">
+
+                <button className="rounded-xl bg-green-600 px-4 py-2">
+                Approve Claim
+                </button>
+
+                <button className="rounded-xl bg-amber-600 px-4 py-2">
+                Send Back
+                </button>
+
+                <button className="rounded-xl bg-red-600 px-4 py-2">
+                Reject
+                </button>
+
+            </div>
+
+            </div>
+
+            <div className="col-span-4 rounded-3xl border border-white/20 bg-[#102E67]/80 p-4">
+
+            <h2 className="mb-4 text-lg font-bold text-white">
+                Attachments
+            </h2>
+
+            <div className="space-y-2">
+
+                <div className="rounded-xl bg-white/5 p-3">
+                📄 hotel_invoice.pdf
+                </div>
+
+                <div className="rounded-xl bg-white/5 p-3">
+                📄 travel_ticket.pdf
+                </div>
+
+                <div className="rounded-xl bg-white/5 p-3">
+                🖼 receipt.jpg
+                </div>
+
+            </div>
+
+            </div>
+
+        </div>
+
+        {/* Row 3 */}
+
+        <div className="rounded-3xl border border-white/20 bg-[#102E67]/80 p-4">
+
+            <h2 className="mb-4 text-lg font-bold text-white">
+            Approval History
+            </h2>
+
+            <div className="space-y-4">
+
+            <div>
+                <div className="font-medium text-white">
+                John Doe
+                </div>
+
+                <div className="text-sm text-white/60">
+                Claim submitted for approval
+                </div>
+            </div>
+
+            <div>
+                <div className="font-medium text-white">
+                Supervisor Manager
+                </div>
+
+                <div className="text-sm text-white/60">
+                Reviewed and forwarded to Finance
+                </div>
+            </div>
+
+            <div>
+                <div className="font-medium text-white">
+                Finance Team
+                </div>
+
+                <div className="text-sm text-white/60">
+                Claim currently under finance review
+                </div>
+            </div>
+
+            </div>
+
+        </div>
+
+        </div>
+
+        </section>
+
+      </div>
+
+    </main>
+  );
+}

@@ -1,0 +1,541 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { approvalGroupService } from "@/services/approval-group.service";
+import { useRouter } from "next/navigation";
+
+import Sidebar from "@/components/layout/sidebar";
+import Topbar from "@/components/layout/topbar";
+import PermissionGuard from "@/components/auth/permission-guard";
+
+type ApprovalGroup = {
+  id: string;
+  group_code: string;
+  group_name: string;
+  approval_method: "ANY_ONE" | "ALL";
+  is_active: boolean;
+  description: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export default function ApprovalGroupsPage() {
+
+  const router = useRouter();
+
+  const [search, setSearch] =
+    useState("");
+
+  const [statusFilter, setStatusFilter] =
+    useState("All");
+
+  const [approvalGroups, setApprovalGroups] =
+    useState<ApprovalGroup[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const loadApprovalGroups = async () => {
+  try {
+
+    setLoading(true);
+
+    const response =
+      await approvalGroupService.getApprovalGroups();
+
+    setApprovalGroups(
+      response.value
+    );
+
+  } catch (error) {
+
+    console.error(
+      "Failed to load approval groups",
+      error
+    );
+
+  } finally {
+
+    setLoading(false);
+
+  }
+};
+
+  const filteredGroups =
+    approvalGroups.filter((group) => {
+
+      const matchesSearch =
+        group.group_code
+          .toLowerCase()
+          .includes(search.toLowerCase()) ||
+        group.group_name
+          .toLowerCase()
+          .includes(search.toLowerCase());
+
+      const matchesStatus =
+        statusFilter === "All" ||
+        group.is_active ? "Active" : "Inactive" === statusFilter;
+
+      return (
+        matchesSearch &&
+        matchesStatus
+      );
+    });
+
+  return (
+    <PermissionGuard
+      permission="approval_group:read"
+    >
+      <main className="relative flex min-h-screen overflow-hidden bg-gradient-to-b from-[#030B1F] to-[#06153C] text-white">
+
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(59,130,246,0.35),transparent_30%),radial-gradient(circle_at_85%_15%,rgba(34,211,238,0.20),transparent_25%),radial-gradient(circle_at_80%_80%,rgba(99,102,241,0.25),transparent_30%),radial-gradient(circle_at_50%_50%,rgba(37,99,235,0.12),transparent_50%)]" />
+
+        <div
+          className="
+          absolute
+          left-1/2
+          top-1/2
+          h-[1800px]
+          w-[1800px]
+          -translate-x-1/2
+          -translate-y-1/2
+          rounded-full
+          bg-cyan-500/10
+          blur-[260px]
+          "
+        />
+
+        <div className="relative z-10 flex min-h-screen w-full">
+
+          <Sidebar active="approval-groups" />
+
+          <section className="flex-1">
+
+            <Topbar
+              title="Approval Groups"
+              subtitle="Manage workflow approval teams"
+            />
+
+            <div className="p-4">
+
+              <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur-xl">
+
+                <div className="mb-4 grid gap-3 md:grid-cols-4">
+
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                    <p className="text-[11px] text-white/60">
+                      Total Groups
+                    </p>
+                    <h3 className="mt-1 text-lg font-semibold text-cyan-300">
+                      {approvalGroups.length}
+                    </h3>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                    <p className="text-[11px] text-white/60">
+                      Active
+                    </p>
+                    <h3 className="mt-1 text-lg font-semibold text-green-300">
+                      {approvalGroups.filter(
+                        (group) => group.is_active
+                      ).length}
+                    </h3>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                    <p className="text-[11px] text-white/60">
+                      Inactive
+                    </p>
+                    <h3 className="mt-1 text-lg font-semibold text-red-300">
+                      {approvalGroups.filter(
+                        (group) => !group.is_active
+                      ).length}
+                    </h3>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+
+                  <p className="text-[11px] text-white/60">
+                    Used In Workflows
+                  </p>
+
+                  <h3 className="mt-1 text-lg font-semibold text-cyan-300">
+                    0
+                  </h3>
+
+                </div>
+
+                </div>
+
+              <div className="mb-4 flex items-center justify-between">
+
+                <div className="flex items-center gap-2">
+
+                  <input
+                    placeholder="Search group..."
+                    value={search}
+                    onChange={(e) =>
+                      setSearch(
+                        e.target.value
+                      )
+                    }
+                    className="
+                      h-9
+                      w-[220px]
+                      rounded-xl
+                      border
+                      border-white/10
+                      bg-white/10
+                      px-3
+                      text-xs
+                      text-white
+                      "
+                  />
+
+                  <select
+                    value={statusFilter}
+                    onChange={(e) =>
+                      setStatusFilter(
+                        e.target.value
+                      )
+                    }
+                    className="
+                      h-9
+                      rounded-xl
+                      border
+                      border-white/10
+                      bg-white/10
+                      px-3
+                      text-xs
+                      text-white
+                      "
+                  >
+                    <option
+                      value="All"
+                      className="bg-[#17386E]"
+                    >
+                      All
+                    </option>
+
+                    <option
+                      value="Active"
+                      className="bg-[#17386E]"
+                    >
+                      Active
+                    </option>
+
+                    <option
+                      value="Inactive"
+                      className="bg-[#17386E]"
+                    >
+                      Inactive
+                    </option>
+                  </select>
+
+                  <select
+                    className="
+                      h-9
+                      rounded-xl
+                      border
+                      border-white/10
+                      bg-white/10
+                      px-3
+                      text-xs
+                      text-white
+                      "
+                  >
+
+                    <option
+                      className="bg-[#17386E]"
+                    >
+                      All Methods
+                    </option>
+
+                    <option
+                      className="bg-[#17386E]"
+                    >
+                      ANY_ONE
+                    </option>
+
+                    <option
+                      className="bg-[#17386E]"
+                    >
+                      ALL
+                    </option>
+
+                  </select>
+
+                </div>
+
+                <div className="flex items-center gap-2">
+
+                  <button
+                    onClick={() =>
+                      router.push(
+                        "/admin/administration/approval-groups/new"
+                      )
+                    }
+                    className="
+                      h-9
+                      rounded-xl
+                      bg-cyan-500
+                      px-4
+                      text-xs
+                      font-medium
+                      text-black
+                      "
+                  >
+                    + New Group
+                  </button>
+
+                </div>
+
+              </div>
+
+              <div className="overflow-x-auto">
+
+                <table className="w-full">
+
+                  <thead>
+
+                    <tr className="border-b border-white/10">
+
+                      <th className="p-3">
+
+                        <input type="checkbox" />
+
+                      </th>
+
+                      <th className="p-3 text-left text-xs font-semibold">
+                        Group Code
+                      </th>
+
+                      <th className="p-3 text-left text-xs font-semibold">
+                        Group Name
+                      </th>
+
+                      <th className="p-3 text-left text-xs font-semibold">
+                        Approval Method
+                      </th>
+
+                      <th className="p-3 text-left text-xs font-semibold">
+                        Members
+                      </th>
+
+                      <th className="p-3 text-left text-xs font-semibold">
+                        Status
+                      </th>
+
+                      <th className="p-3 text-left text-xs font-semibold">
+                        Workflow Usage
+                      </th>
+
+                      <th className="p-3 text-left text-xs font-semibold">
+                        Updated
+                      </th>
+
+                      <th className="p-3 text-left text-xs font-semibold">
+                        Action
+                      </th>
+
+                    </tr>
+
+                  </thead>
+
+                  <tbody>
+
+                    {filteredGroups.length === 0 ? (
+
+                      <tr>
+
+                        <td
+                          colSpan={7}
+                          className="py-16 text-center"
+                        >
+
+                          <h3 className="text-base font-semibold text-cyan-300">
+                            No Approval Groups Found
+                          </h3>
+
+                          <p className="mt-2 text-xs text-white/60">
+                            No approval groups match your search criteria.
+                          </p>
+
+                        </td>
+
+                      </tr>
+
+                    ) : (
+
+                      filteredGroups.map((group) => (
+
+                        <tr
+                          key={group.id}
+                          className="border-b border-white/5"
+                        >
+
+                          <td className="p-3">
+
+                            <input type="checkbox" />
+
+                          </td>
+
+                          <td className="p-3 text-xs">
+                            {group.group_code}
+                          </td>
+
+                          <td className="p-3 text-xs font-medium">
+                            {group.group_name}
+                          </td>
+
+                          <td className="p-3">
+
+                            <span
+                              className={`
+                            rounded-full
+                            px-2
+                            py-1
+                            text-[11px]
+                            font-medium
+
+                            ${group.approval_method === "ANY_ONE"
+                                  ? "bg-cyan-500/15 text-cyan-300"
+                                  : "bg-violet-500/15 text-violet-300"
+                                }
+                            `}
+                            >
+
+                              {group.approval_method}
+
+                            </span>
+
+                          </td>
+
+                          <td className="p-3">
+
+                            <div className="flex flex-wrap gap-1 text-xs">
+
+                              <span>Prince</span>
+
+                              <span>Kawsar</span>
+
+                              <span>Emon</span>
+
+                              <span className="text-cyan-300">
+                                +2
+                              </span>
+
+                            </div>
+
+                          </td>
+
+                          <td className="p-3">
+
+                            <span
+                                className={`rounded-full px-2 py-1 text-[11px] font-medium ${
+                                  group.is_active
+                                    ? "bg-green-500/15 text-green-300"
+                                    : "bg-red-500/15 text-red-300"
+                                }`}
+                              >
+                              {group.is_active ? "Active" : "Inactive"}
+                            </span>
+
+                          </td>
+
+                          <td className="p-3 text-xs">
+                            {"0 Workflows"} Workflows
+                          </td>
+
+                          <td className="p-3 text-xs">
+                            {new Date(group.updated_at)
+                            .toLocaleDateString()}
+                          </td>
+
+                          <td className="p-3">
+
+                            <div className="flex items-center gap-2">
+
+                              <button
+                                onClick={() =>
+                                  router.push(
+                                    `/admin/administration/approval-groups/view/${group.id}`
+                                  )
+                                }
+                                className="
+                              rounded-lg
+                              border
+                              border-cyan-500/20
+                              bg-cyan-500/10
+                              px-2
+                              py-1
+                              text-xs
+                              text-cyan-300
+                              "
+                              >
+                                View
+                              </button>
+
+                              <button
+                                onClick={() =>
+                                  router.push(
+                                    `/admin/administration/approval-groups/edit/${group.id}`
+                                  )
+                                }
+                                className="
+                              rounded-lg
+                              border
+                              border-white/10
+                              bg-white/5
+                              px-2
+                              py-1
+                              text-xs
+                              text-white
+                              "
+                              >
+                                Edit
+                              </button>
+
+                              <button
+                                className="
+                              rounded-lg
+                              border
+                              border-red-500/30
+                              bg-red-500/10
+                              px-2
+                              py-1
+                              text-xs
+                              text-red-300
+                              "
+                              >
+                                Delete
+                              </button>
+
+                            </div>
+
+                          </td>
+
+                        </tr>
+
+                      ))
+
+                    )}
+
+                  </tbody>
+
+                </table>
+
+              </div>
+
+            </div>
+
+        </div>
+
+      </section>
+
+    </div>
+
+      </main >
+    </PermissionGuard >
+  );
+}
