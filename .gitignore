@@ -8,6 +8,17 @@ backend/uploads/
 backend/venv/
 backend/.venv/
 backend/logs/
+backend/.git/
+backend/objects/
+backend/refs/
+backend/hooks/
+backend/info/
+backend/HEAD
+backend/config
+backend/description
+backend/index
+backend/COMMIT_EDITMSG
+backend/backup.sql
 
 # Frontend
 frontend/.env.local
@@ -15,6 +26,22 @@ frontend/.env.*
 !frontend/.env.example
 frontend/node_modules/
 frontend/.next/
+frontend/.git/
+frontend/objects/
+frontend/refs/
+frontend/hooks/
+frontend/info/
+frontend/logs/
+frontend/HEAD
+frontend/config
+frontend/description
+frontend/index
+frontend/COMMIT_EDITMSG
+frontend/FETCH_HEAD
+frontend/ORIG_HEAD
+frontend/*.txt
+frontend/openapi.json
+frontend/step*.txt
 
 # OS
 .DS_Store
