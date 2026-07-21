@@ -220,11 +220,14 @@ console.log(
 
 } catch (error: any) {
 
-  setLoginError(
-    error?.response?.data?.error
-      ?.detail ??
-    "Invalid email or password"
-  );
+  const status = error?.response?.status;
+  if (status === 429) {
+    setLoginError("Too many login attempts. Please wait 1 minute and try again.");
+  } else {
+    const detail = error?.response?.data?.error?.detail;
+    const msg = typeof detail === "string" ? detail : "Invalid email or password";
+    setLoginError(msg);
+  }
 
 } finally {
 

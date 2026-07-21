@@ -56,3 +56,5 @@ pre-commit==4.0.1
 # ── Development ──────────────────────────────────────────────
 ipython==8.31.0
 watchfiles==1.0.3
+
+slowapi==0.1.10
