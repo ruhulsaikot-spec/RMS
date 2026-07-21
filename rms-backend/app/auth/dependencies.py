@@ -43,6 +43,7 @@ bearer_scheme = HTTPBearer(
 
 # ── Token Verification Dependency ─────────────────────────────
 async def verify_token(
+    request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> dict:
@@ -67,11 +68,12 @@ async def verify_token(
         AuthenticationError: If token is missing, invalid, expired, or revoked.
     """
     print("CREDENTIALS =>", credentials)
-
-    if credentials is None:
-        raise AuthenticationError("Authentication required: no Bearer token provided")
-
-    token = credentials.credentials
+    # Try cookie first, then Bearer token
+    token = request.cookies.get("access_token")
+    if not token:
+        if credentials is None:
+            raise AuthenticationError("Authentication required: no Bearer token provided")
+        token = credentials.credentials
 
     # Decode and validate JWT signature
     try:
