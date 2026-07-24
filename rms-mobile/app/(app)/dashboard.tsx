@@ -396,11 +396,12 @@ const styles = StyleSheet.create({
     justifyContent: "center", alignItems: "center",
   },
   actionIcon: { fontSize: 22 },
-  actionBottom: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  actionLabel: { color: "#0f172a", fontSize: 12, fontWeight: "700" },
+  actionBottom: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", overflow: "hidden" },
+  actionLabel: { color: "#0f172a", fontSize: 12, fontWeight: "700", flex: 1, flexShrink: 1 },
   actionArrow: {
     width: 28, height: 28, borderRadius: 14,
     justifyContent: "center", alignItems: "center",
+    flexShrink: 0,
   },
   actionArrowText: { fontSize: 14, fontWeight: "700" },
 });
