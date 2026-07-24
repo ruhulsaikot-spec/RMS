@@ -43,3 +43,5 @@ rms-mobile/dev-build*.apk
 
 rms-frontend/.next/
 rms-frontend/node_modules/
+
+rms-monorepo/
