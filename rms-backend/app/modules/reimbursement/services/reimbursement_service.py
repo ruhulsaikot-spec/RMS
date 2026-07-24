@@ -2394,11 +2394,14 @@ class ReimbursementService:
                     "application_no": application.application_no,
                     "employee_id": application.employee_id,
                     "employee_name": application.employee.full_name if application.employee else None,
+                    "department_name": application.employee.department.name if application.employee and application.employee.department else None,
+                    "designation_name": application.employee.designation.name if application.employee and application.employee.designation else None,
                     "requested_amount": float(
                         application.requested_amount
                     ),
                     "status": application.status,
                     "created_at": application.created_at.isoformat() if application.created_at else None,
+                    "submitted_at": application.submitted_at.isoformat() if application.submitted_at else None,
                     "action_type": approval.workflow_step.action_type if approval.workflow_step else None,
                 }
             )

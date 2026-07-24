@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
-import { Search, Plus, Users, X } from "lucide-react";
+import { Search, Plus, Users, X, Download, Upload } from "lucide-react";
 import Sidebar from "@/components/layout/sidebar";
 import Topbar from "@/components/layout/topbar";
 import PermissionGuard from "@/components/auth/permission-guard";
@@ -237,7 +237,60 @@ export default function EmployeesPage() {
                   ))}
                 </select>
 
-                <div className="ml-auto">
+                <div className="ml-auto flex items-center gap-2">
+                  {/* Download Template */}
+                  <ActionGuard permission="employee:create">
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = await apiClient.get("/employees/bulk/template", { responseType: "blob" });
+                          const url = window.URL.createObjectURL(new Blob([res.data]));
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = "employee_template.xlsx";
+                          a.click();
+                          window.URL.revokeObjectURL(url);
+                        } catch {
+                          toast.error("Failed to download template.");
+                        }
+                      }}
+                      className="flex items-center gap-1.5 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-xs font-semibold text-cyan-300 hover:bg-cyan-500/20 transition-colors"
+                    >
+                      <Download size={13} /> Template
+                    </button>
+                  </ActionGuard>
+
+                  {/* Bulk Upload */}
+                  <ActionGuard permission="employee:create">
+                    <label className="flex items-center gap-1.5 rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-2 text-xs font-semibold text-green-300 hover:bg-green-500/20 transition-colors cursor-pointer">
+                      <Upload size={13} /> Bulk Upload
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const formData = new FormData();
+                          formData.append("file", file);
+                          try {
+                            const res = await apiClient.post("/employees/bulk/upload", formData, {
+                              headers: { "Content-Type": "multipart/form-data" },
+                            });
+                            toast.success(`Upload complete: ${res.data.success} success, ${res.data.failed} failed.`);
+                            if (res.data.errors?.length > 0) {
+                              res.data.errors.forEach((err: string) => toast.error(err));
+                            }
+                            await loadEmployees();
+                          } catch (error: any) {
+                            toast.error(error?.response?.data?.detail || "Upload failed.");
+                          }
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                  </ActionGuard>
+
                   <ActionGuard permission="employee:create">
                     <button onClick={openNew}
                       className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-2 text-xs font-semibold text-black hover:opacity-90 transition-opacity">

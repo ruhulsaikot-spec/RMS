@@ -150,8 +150,20 @@ export default function ApprovalDetailPage() {
           setProcessing(false);
           return;
         }
+        const verifiedNum = Number(verifiedAmount);
+        const requestedNum = Number(claim.requested_amount || 0);
+        if (verifiedNum > requestedNum) {
+          toast.error(`Verified amount cannot exceed requested amount (৳ ${requestedNum.toLocaleString()})`);
+          setProcessing(false);
+          return;
+        }
+        if (verifiedNum < requestedNum && !remarks.trim()) {
+          toast.error("Remarks are required when verified amount is less than requested amount.");
+          setProcessing(false);
+          return;
+        }
         await reimbursementService.financeReview(claim.id, {
-          verified_amount: Number(verifiedAmount),
+          verified_amount: verifiedNum,
           finance_adjustment_reason: remarks || undefined,
         });
       } else if (selectedAction === "APPROVE") {

@@ -7,11 +7,17 @@ export default function AppLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: "#0d1628",
-          borderTopColor: "rgba(255,255,255,0.1)",
+          backgroundColor: "#f0f4ff",
+          borderTopColor: "rgba(37,99,235,0.15)",
+          borderTopWidth: 1,
+          shadowColor: "#2563eb",
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.08,
+          shadowRadius: 12,
+          elevation: 10,
         },
-        tabBarActiveTintColor: "#0891b2",
-        tabBarInactiveTintColor: "#4a6080",
+        tabBarActiveTintColor: "#2563eb",
+        tabBarInactiveTintColor: "#94a3b8",
       }}
     >
       <Tabs.Screen
@@ -41,6 +47,18 @@ export default function AppLayout() {
           title: "Notifications",
           tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>🔔</Text>,
         }}
+      />
+      <Tabs.Screen
+        name="claims/new"
+        options={{ tabBarButton: () => <></>, tabBarItemStyle: { display: "none" } }}
+      />
+      <Tabs.Screen
+        name="claims/[id]"
+        options={{ tabBarButton: () => <></>, tabBarItemStyle: { display: "none" } }}
+      />
+      <Tabs.Screen
+        name="approvals/[id]"
+        options={{ tabBarButton: () => <></>, tabBarItemStyle: { display: "none" } }}
       />
     </Tabs>
   );

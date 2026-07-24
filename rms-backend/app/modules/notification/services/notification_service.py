@@ -127,3 +127,24 @@ class NotificationService:
                 type=cfg["type"],
                 application_id=application_id,
             )
+            # Send push notification
+            try:
+                from sqlalchemy import text
+                from app.core.push_notification import send_push_notification_multicast
+                result = await db.execute(
+                    text("SELECT token FROM device_tokens WHERE user_id = :user_id"),
+                    {"user_id": user_id}
+                )
+                tokens = [row[0] for row in result.fetchall()]
+                if tokens:
+                    await send_push_notification_multicast(
+                        tokens=tokens,
+                        title=cfg["title"],
+                        body=cfg["message"],
+                        data={
+                            "application_id": application_id or "",
+                            "event": event,
+                        }
+                    )
+            except Exception as push_err:
+                pass  # Push notification failure should not block the flow

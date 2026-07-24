@@ -16,7 +16,7 @@
         "backgroundColor": "#030B1F",
         "foregroundImage": "./assets/icon.png"
       },
-      "package": "com.wyzetech.rms",
+      "package": "com.wyzetech.expenora",
       "predictiveBackGestureEnabled": false,
       "usesCleartextTraffic": true
     },
@@ -37,10 +37,12 @@
         "expo-build-properties",
         {
           "android": {
-            "usesCleartextTraffic": true
+            "usesCleartextTraffic": true,
+            "googleServicesFile": "./google-services.json"
           }
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true

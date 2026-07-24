@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { authService } from "../services/auth.service";
+import { pushNotificationService } from "../services/push-notification.service";
 
 interface AuthContextType {
   user: any;
@@ -32,6 +33,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     const data = await authService.login(email, password);
     setUser(data.user);
+    // Register push notification token
+    try {
+      await pushNotificationService.registerForPushNotifications();
+    } catch (e) {}
   };
 
   const logout = async () => {

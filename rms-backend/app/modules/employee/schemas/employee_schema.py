@@ -25,15 +25,13 @@ class EmployeeCreate(BaseModel):
     name: str
     email: str
     mobile: str | None = None
-
     company_id: str
     department_id: str
     designation_id: str
     location_id: str
-
     line_manager_id: str | None = None
-
     joining_date: date
+    is_active: bool = True
 
 
 class EmployeeUpdate(BaseModel):

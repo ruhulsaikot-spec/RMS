@@ -56,6 +56,9 @@ from app.modules.notification.routers.notification_router import (
 from app.modules.reports.routers.report_router import (
     router as report_router,
 )
+from app.modules.notification.routers.device_token_router import (
+    router as device_token_router,
+)
 from app.auth.routers import auth_router
 
 
@@ -104,6 +107,10 @@ api_v1_router.include_router(
 api_v1_router.include_router(
     report_router,
 )
+api_v1_router.include_router(
+    device_token_router,
+)
+
 
 # from app.modules.uploaded_file.routers.uploaded_file_router import (
 #     router as uploaded_file_router,

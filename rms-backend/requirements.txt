@@ -58,3 +58,4 @@ ipython==8.31.0
 watchfiles==1.0.3
 
 slowapi==0.1.10
+openpyxl==3.1.5

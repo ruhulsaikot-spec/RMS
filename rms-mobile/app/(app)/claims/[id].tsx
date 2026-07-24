@@ -1,0 +1,616 @@
+import { useEffect, useState, useRef } from "react";
+import {
+  View, Text, StyleSheet, ScrollView,
+  TouchableOpacity, TextInput, ActivityIndicator,
+  Alert, Animated, Dimensions,
+} from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { apiClient } from "../../../src/lib/api-client";
+import * as DocumentPicker from "expo-document-picker";
+
+const SCREEN_WIDTH = Dimensions.get("window").width;
+
+const STATUS_COLORS: Record<string, { text: string; bg: string }> = {
+  DRAFT: { text: "#64748b", bg: "#f1f5f9" },
+  SUBMITTED: { text: "#2563eb", bg: "#eff6ff" },
+  IN_APPROVAL: { text: "#8b5cf6", bg: "#f5f3ff" },
+  VERIFIED: { text: "#0891b2", bg: "#ecfeff" },
+  PAID: { text: "#10b981", bg: "#f0fdf4" },
+  REJECTED: { text: "#ef4444", bg: "#fef2f2" },
+  RETURNED: { text: "#f59e0b", bg: "#fffbeb" },
+};
+
+function FloatingInput({
+  label, value, onChangeText, placeholder, keyboardType, multiline, numberOfLines,
+}: {
+  label: string; value: string;
+  onChangeText: (text: string) => void;
+  placeholder?: string; keyboardType?: any;
+  multiline?: boolean; numberOfLines?: number;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  const animatedValue = useRef(new Animated.Value(value ? 1 : 0)).current;
+
+  const handleFocus = () => {
+    setIsFocused(true);
+    Animated.timing(animatedValue, { toValue: 1, duration: 200, useNativeDriver: false }).start();
+  };
+
+  const handleBlur = () => {
+    setIsFocused(false);
+    if (!value) Animated.timing(animatedValue, { toValue: 0, duration: 200, useNativeDriver: false }).start();
+  };
+
+  const labelStyle = {
+    position: "absolute" as const, left: 16,
+    top: animatedValue.interpolate({ inputRange: [0, 1], outputRange: [16, -8] }),
+    fontSize: animatedValue.interpolate({ inputRange: [0, 1], outputRange: [14, 11] }),
+    color: animatedValue.interpolate({ inputRange: [0, 1], outputRange: ["#94a3b8", "#2563eb"] }),
+    backgroundColor: "#fff",
+    paddingHorizontal: animatedValue.interpolate({ inputRange: [0, 1], outputRange: [0, 4] }),
+    zIndex: 1,
+  };
+
+  return (
+    <View style={floatStyles.wrapper}>
+      <Animated.Text style={labelStyle}>{label}</Animated.Text>
+      <TextInput
+        style={[
+          floatStyles.input,
+          multiline && { height: numberOfLines ? numberOfLines * 24 + 28 : 100, textAlignVertical: "top" },
+          isFocused && floatStyles.inputFocused,
+        ]}
+        value={value}
+        onChangeText={onChangeText}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        keyboardType={keyboardType || "default"}
+        multiline={multiline}
+        numberOfLines={numberOfLines}
+        placeholder={isFocused ? placeholder : ""}
+        placeholderTextColor="#94a3b8"
+      />
+    </View>
+  );
+}
+
+const floatStyles = StyleSheet.create({
+  wrapper: { position: "relative", marginBottom: 16 },
+  input: {
+    borderWidth: 1.5, borderColor: "#e2e8f0", borderRadius: 14,
+    paddingHorizontal: 16, paddingTop: 18, paddingBottom: 14,
+    fontSize: 14, color: "#0f172a", backgroundColor: "#fff",
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04, shadowRadius: 6, elevation: 2,
+  },
+  inputFocused: { borderColor: "#2563eb", shadowColor: "#2563eb", shadowOpacity: 0.12, elevation: 4 },
+});
+
+const REIMBURSEMENT_TYPE_ID = "3d258f63-1532-4f30-b3e4-4d1331006b0e";
+
+export default function ClaimEditScreen() {
+  const { id } = useLocalSearchParams();
+  const router = useRouter();
+  const [claim, setClaim] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [expenseTypes, setExpenseTypes] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [showProjectDropdown, setShowProjectDropdown] = useState<number | null>(null);
+  const [attachments, setAttachments] = useState<any[]>([]);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [remarks, setRemarks] = useState("");
+  const [expenseItems, setExpenseItems] = useState<any[]>([]);
+
+  useEffect(() => {
+    loadData();
+  }, [id]);
+
+  useEffect(() => {
+    console.log("expenseItems updated:", expenseItems.length);
+  }, [expenseItems]);
+
+  const loadData = async () => {
+    try {
+      console.log("Loading claim ID:", id);
+      const claimRes = await apiClient.get(`/reimbursements/${id}`);
+      console.log("Claim loaded OK");
+      const typesRes = await apiClient.get("/expense-types/");
+      console.log("Types loaded OK");
+      const projectsRes = await apiClient.get("/projects/");
+      console.log("Projects loaded OK");
+      
+      const claimData = claimRes.data;
+      console.log("Step 1: claimData assigned");
+      
+      setClaim(claimData);
+      console.log("Step 2: setClaim done");
+      
+      setRemarks(claimData?.data?.remarks || "");
+      console.log("Step 3: setRemarks done");
+
+      const projectList = projectsRes.data || [];
+      setProjects(projectList);
+      console.log("Step 4: setProjects done");
+
+      const projectMap: Record<string, string> = {};
+      try {
+        (projectList || []).forEach((p: any) => {
+          if (p && p.id) projectMap[p.id] = p.name;
+        });
+      } catch (mapErr) {
+        console.log("Project map error:", mapErr);
+      }
+      console.log("Step 5: projectMap done");
+
+      setExpenseTypes(typesRes.data || []);
+      console.log("Step 6: setExpenseTypes done");
+
+      if (claimData.expense_items && claimData.expense_items.length > 0) {
+        console.log("Step 7: setting expense items");
+        setExpenseItems((claimData.expense_items || []).map((item: any, i: number) => {
+          const projectName = item?.project ? (projectMap[item.project] || item.project) : "";
+          return {
+            id: i,
+            expense_type_id: item?.claim_type || null,
+            amount: String(item?.amount || ""),
+            purpose: item?.purpose || "",
+            mode: item?.mode || "",
+            from_location: item?.from_location || "",
+            to_location: item?.to_location || "",
+            project_id: null,
+            project_name: projectName,
+            claim_date: item?.expense_date || new Date().toISOString().split("T")[0],
+            claim_date_display: item?.expense_date
+              ? item.expense_date.split("-").reverse().join("/") : "",
+          };
+        }));
+        console.log("Step 8: expense items set");
+      }
+
+      if (claimData.attachments && Array.isArray(claimData.attachments)) {
+        setAttachments(claimData.attachments.map((att: any) => ({
+          id: att.id || "", name: att.file_name || "attachment", existing: true,
+        })));
+        console.log("Step 9: attachments set");
+      }
+
+      return; // Skip old code below
+    } catch (e: any) {
+      console.log("Load error:", JSON.stringify(e?.response?.data), e?.message);
+      Alert.alert("Error", e?.response?.data?.detail || e?.message || "Failed to load claim");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addExpenseItem = () => {
+    setExpenseItems(prev => [...prev, {
+      id: Date.now(), expense_type_id: null, amount: "",
+      purpose: "", mode: "", from_location: "", to_location: "",
+      project_id: null, project_name: "",
+      claim_date: new Date().toISOString().split("T")[0], claim_date_display: "",
+    }]);
+  };
+
+  const removeExpenseItem = (id: number) => {
+    if (expenseItems.length === 1) return;
+    setExpenseItems(prev => prev.filter(item => item.id !== id));
+  };
+
+  const updateExpenseItem = (id: number, field: string, value: any) => {
+    setExpenseItems(prev => prev.map(item =>
+      item.id === id ? { ...item, [field]: value } : item
+    ));
+  };
+
+  const totalAmount = expenseItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+
+  const pickDocument = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ["application/pdf", "image/jpeg", "image/png"],
+      copyToCacheDirectory: true,
+    });
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      try {
+        setUploadingAttachment(true);
+        const token = await (await import("expo-secure-store")).getItemAsync("access_token");
+        const formData = new FormData();
+        formData.append("file", { uri: asset.uri, name: asset.name, type: asset.mimeType || "application/octet-stream" } as any);
+        const response = await fetch("http://192.168.0.102:8000/api/files/upload", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${token}`, "Accept": "application/json" },
+          body: formData,
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setAttachments(prev => [...prev, { id: data.id, name: data.original_name }]);
+        }
+      } catch (e) {
+        Alert.alert("Error", "Failed to upload attachment");
+      } finally {
+        setUploadingAttachment(false);
+      }
+    }
+  };
+
+  const handleSave = async (isDraft: boolean) => {
+    const validItems = expenseItems.filter(item => item.expense_type_id && item.amount);
+    if (validItems.length === 0) {
+      Alert.alert("Error", "Please add at least one expense item");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const payload = {
+        requested_amount: totalAmount,
+        remarks: remarks,
+        expense_items: validItems.map((item: any) => ({
+          claim_type: item.expense_type_id,
+          amount: Number(item.amount),
+          purpose: item.purpose,
+          expense_date: item.claim_date,
+          mode: item.mode || null,
+          from_location: item.from_location || null,
+          to_location: item.to_location || null,
+          project: item.project_name || null,
+        })),
+        existing_attachment_paths: attachments.filter((a: any) => a.existing).map((a: any) => ({ id: a.id })),
+        attachment_ids: attachments.filter((a: any) => !a.existing).map((a: any) => a.id),
+      };
+
+      await apiClient.put(`/reimbursements/${id}`, payload);
+
+      if (!isDraft) {
+        await apiClient.post(`/reimbursements/${id}/submit`);
+      }
+
+      Alert.alert("Success", isDraft ? "Claim updated" : "Claim resubmitted successfully", [
+        { text: "OK", onPress: () => router.back() }
+      ]);
+    } catch (e: any) {
+      Alert.alert("Error", e?.response?.data?.detail || "Failed to save claim");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#2563eb" />
+      </View>
+    );
+  }
+
+  const statusStyle = claim ? STATUS_COLORS[claim.status] || STATUS_COLORS.DRAFT : STATUS_COLORS.DRAFT;
+  const canEdit = claim && ["DRAFT", "RETURNED"].includes(claim.status);
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.topGlow} />
+      <View style={styles.topGlow2} />
+
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <View style={styles.backBtnInner}>
+            <Text style={styles.backIcon}>‹</Text>
+          </View>
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>{claim?.application_no}</Text>
+          <Text style={styles.subtitle}>Edit Claim</Text>
+        </View>
+        <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+          <Text style={[styles.statusText, { color: statusStyle.text }]}>{claim?.status}</Text>
+        </View>
+      </View>
+
+      {!canEdit ? (
+        <View style={styles.center}>
+          <Text style={styles.emptyText}>This claim cannot be edited</Text>
+        </View>
+      ) : (
+        <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+          {/* Expense Items */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Expense Items *</Text>
+              <View style={styles.totalBadge}>
+                <Text style={styles.totalText}>Total: ৳ {totalAmount.toLocaleString()}</Text>
+              </View>
+            </View>
+
+            {expenseItems.length === 0 ? (
+              <Text style={{ color: "red" }}>No items</Text>
+            ) : null}
+            {expenseItems.map((item, index) => (
+              <View key={item.id} style={styles.expenseItem}>
+                <View style={styles.expenseItemHeader}>
+                  <Text style={styles.expenseItemNo}>Item {index + 1}</Text>
+                  {expenseItems.length > 1 && (
+                    <TouchableOpacity onPress={() => removeExpenseItem(item.id)} style={styles.removeBtn}>
+                      <Text style={styles.removeBtnText}>✕ Remove</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Expense Type */}
+                <Text style={styles.fieldLabel}>Expense Type *</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+                  {expenseTypes.map((et) => (
+                    <TouchableOpacity
+                      key={et.id}
+                      style={[styles.typeChip, item.expense_type_id === et.id && styles.typeChipActive]}
+                      onPress={() => updateExpenseItem(item.id, "expense_type_id", et.id)}
+                    >
+                      <Text style={[styles.typeChipText, item.expense_type_id === et.id && styles.typeChipTextActive]}>
+                        {et.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+
+                {/* Amount & Date */}
+                <View style={styles.row}>
+                  <View style={styles.halfField}>
+                    <FloatingInput
+                      label="Amount *" value={item.amount}
+                      onChangeText={(text) => updateExpenseItem(item.id, "amount", text)}
+                      placeholder="0.00" keyboardType="decimal-pad"
+                    />
+                  </View>
+                  <View style={styles.halfField}>
+                    <View style={styles.dateWrapper}>
+                      <Text style={styles.dateIcon}>📅</Text>
+                      <TextInput
+                        style={styles.dateInput}
+                        placeholder="DD/MM/YYYY"
+                        placeholderTextColor="#94a3b8"
+                        keyboardType="number-pad"
+                        maxLength={10}
+                        value={item.claim_date_display || ""}
+                        onChangeText={(text) => {
+                          const cleaned = text.replace(/\D/g, "");
+                          let display = cleaned;
+                          if (cleaned.length > 2) display = cleaned.slice(0, 2) + "/" + cleaned.slice(2);
+                          if (cleaned.length > 4) display = cleaned.slice(0, 2) + "/" + cleaned.slice(2, 4) + "/" + cleaned.slice(4, 8);
+                          updateExpenseItem(item.id, "claim_date_display", display);
+                          if (cleaned.length === 8) {
+                            const stored = `${cleaned.slice(4, 8)}-${cleaned.slice(2, 4)}-${cleaned.slice(0, 2)}`;
+                            updateExpenseItem(item.id, "claim_date", stored);
+                          }
+                        }}
+                      />
+                    </View>
+                  </View>
+                </View>
+
+                {/* Purpose & Mode */}
+                <View style={styles.row}>
+                  <View style={styles.halfField}>
+                    <FloatingInput label="Purpose" value={item.purpose}
+                      onChangeText={(text) => updateExpenseItem(item.id, "purpose", text)} placeholder="Purpose" />
+                  </View>
+                  <View style={styles.halfField}>
+                    <FloatingInput label="Mode" value={item.mode}
+                      onChangeText={(text) => updateExpenseItem(item.id, "mode", text)} placeholder="Mode" />
+                  </View>
+                </View>
+
+                {/* From & To */}
+                <View style={styles.row}>
+                  <View style={styles.halfField}>
+                    <FloatingInput label="From" value={item.from_location}
+                      onChangeText={(text) => updateExpenseItem(item.id, "from_location", text)} placeholder="From" />
+                  </View>
+                  <View style={styles.halfField}>
+                    <FloatingInput label="To" value={item.to_location}
+                      onChangeText={(text) => updateExpenseItem(item.id, "to_location", text)} placeholder="To" />
+                  </View>
+                </View>
+
+                {/* Project Dropdown */}
+                <View style={styles.dropdownWrapper}>
+                  <TouchableOpacity
+                    style={styles.dropdownBtn}
+                    onPress={() => setShowProjectDropdown(showProjectDropdown === item.id ? null : item.id)}
+                  >
+                    <Text style={[styles.dropdownBtnText, !item.project_name && styles.dropdownPlaceholder]}>
+                      {item.project_name || "Select Project (Optional)"}
+                    </Text>
+                    <Text style={styles.dropdownArrow}>▾</Text>
+                  </TouchableOpacity>
+                  {showProjectDropdown === item.id && (
+                    <View style={styles.dropdownList}>
+                      <TouchableOpacity style={styles.dropdownItem}
+                        onPress={() => { updateExpenseItem(item.id, "project_id", null); updateExpenseItem(item.id, "project_name", ""); setShowProjectDropdown(null); }}>
+                        <Text style={styles.dropdownItemText}>None</Text>
+                      </TouchableOpacity>
+                      {projects.map((p: any) => (
+                        <TouchableOpacity key={p.id}
+                          style={[styles.dropdownItem, item.project_id === p.id && styles.dropdownItemActive]}
+                          onPress={() => { updateExpenseItem(item.id, "project_id", p.id); updateExpenseItem(item.id, "project_name", p.name); setShowProjectDropdown(null); }}>
+                          <Text style={[styles.dropdownItemText, item.project_id === p.id && styles.dropdownItemTextActive]}>{p.name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              </View>
+            ))}
+
+            <TouchableOpacity style={styles.addItemBtn} onPress={addExpenseItem}>
+              <Text style={styles.addItemBtnText}>+ Add Another Item</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Attachments */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Attachments</Text>
+            <View style={styles.attachmentBtns}>
+              <TouchableOpacity style={styles.attachBtn} onPress={pickDocument} disabled={uploadingAttachment}>
+                <Text style={styles.attachBtnIcon}>📎</Text>
+                <Text style={styles.attachBtnText}>Add Document</Text>
+              </TouchableOpacity>
+              {uploadingAttachment && <ActivityIndicator color="#2563eb" />}
+            </View>
+            {attachments.length > 0 && (
+              <View style={styles.attachmentList}>
+                {attachments.map((att: any) => (
+                  <View key={att.id} style={styles.attachmentItem}>
+                    <Text style={styles.attachmentIcon}>📄</Text>
+                    <Text style={styles.attachmentName} numberOfLines={1}>{att.name}</Text>
+                    <TouchableOpacity onPress={() => setAttachments(prev => prev.filter((a: any) => a.id !== att.id))}>
+                      <Text style={styles.attachmentRemove}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* Remarks */}
+          <View style={styles.section}>
+            <FloatingInput label="Remarks" value={remarks} onChangeText={setRemarks}
+              placeholder="Add any remarks..." multiline numberOfLines={4} />
+          </View>
+
+          {/* Buttons */}
+          <View style={[styles.btnRow, styles.section]}>
+            <TouchableOpacity style={styles.draftBtn} onPress={() => handleSave(true)} disabled={saving}>
+              <Text style={styles.draftBtnText}>Save Draft</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.submitBtn} onPress={() => handleSave(false)} disabled={saving}>
+              {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Resubmit →</Text>}
+            </TouchableOpacity>
+          </View>
+
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#eef2ff" },
+  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#eef2ff" },
+  topGlow: {
+    position: "absolute", top: -80, right: -80,
+    width: 250, height: 250, borderRadius: 125,
+    backgroundColor: "rgba(37,99,235,0.12)",
+  },
+  topGlow2: {
+    position: "absolute", top: 100, left: -60,
+    width: 200, height: 200, borderRadius: 100,
+    backgroundColor: "rgba(139,92,246,0.08)",
+  },
+  header: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 20, paddingTop: 56, paddingBottom: 20, gap: 12,
+  },
+  backBtn: { shadowColor: "#2563eb", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 6 },
+  backBtnInner: {
+    width: 46, height: 46, borderRadius: 23, backgroundColor: "#fff",
+    justifyContent: "center", alignItems: "center",
+    borderWidth: 1, borderColor: "rgba(37,99,235,0.1)",
+  },
+  backIcon: { fontSize: 22, color: "#2563eb", fontWeight: "600", marginLeft: -2 },
+  title: { color: "#0f172a", fontSize: 18, fontWeight: "800" },
+  subtitle: { color: "#64748b", fontSize: 13 },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  statusText: { fontSize: 11, fontWeight: "800" },
+  scroll: { flex: 1, paddingHorizontal: 16 },
+  section: { marginBottom: 16 },
+  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  sectionTitle: { color: "#0f172a", fontSize: 14, fontWeight: "700", marginBottom: 8 },
+  totalBadge: { backgroundColor: "#2563eb", paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
+  totalText: { color: "#fff", fontSize: 12, fontWeight: "800" },
+  expenseItem: {
+    backgroundColor: "#fff", borderRadius: 20, padding: 18, marginBottom: 12,
+    shadowColor: "#2563eb", shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1, shadowRadius: 16, elevation: 6,
+    borderTopWidth: 3, borderTopColor: "#2563eb",
+  },
+  expenseItemHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  expenseItemNo: { color: "#0f172a", fontSize: 14, fontWeight: "700" },
+  removeBtn: { backgroundColor: "#fef2f2", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  removeBtnText: { color: "#ef4444", fontSize: 12, fontWeight: "600" },
+  fieldLabel: { color: "#64748b", fontSize: 12, fontWeight: "600", marginBottom: 8 },
+  typeChip: {
+    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8,
+    backgroundColor: "#fff", borderWidth: 1.5, borderColor: "rgba(37,99,235,0.1)",
+  },
+  typeChipActive: { backgroundColor: "#2563eb", borderColor: "#2563eb" },
+  typeChipText: { color: "#475569", fontSize: 13, fontWeight: "600" },
+  typeChipTextActive: { color: "#fff" },
+  row: { flexDirection: "row", gap: 10 },
+  halfField: { flex: 1 },
+  dateWrapper: {
+    flexDirection: "row", alignItems: "center", backgroundColor: "#fff",
+    borderRadius: 14, paddingHorizontal: 14, paddingVertical: 14,
+    borderWidth: 1.5, borderColor: "#e2e8f0", gap: 8, marginBottom: 16,
+  },
+  dateIcon: { fontSize: 16 },
+  dateInput: { flex: 1, color: "#0f172a", fontSize: 13, fontWeight: "600" },
+  dropdownWrapper: { marginBottom: 16 },
+  dropdownBtn: {
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    borderWidth: 1.5, borderColor: "#e2e8f0", borderRadius: 14,
+    paddingHorizontal: 16, paddingVertical: 14, backgroundColor: "#fff",
+  },
+  dropdownBtnText: { color: "#0f172a", fontSize: 14, fontWeight: "600" },
+  dropdownPlaceholder: { color: "#94a3b8", fontWeight: "400" },
+  dropdownArrow: { color: "#64748b", fontSize: 14 },
+  dropdownList: {
+    backgroundColor: "#fff", borderRadius: 14,
+    borderWidth: 1.5, borderColor: "#e2e8f0", marginTop: 4,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12, shadowRadius: 16, elevation: 10,
+  },
+  dropdownItem: { padding: 14, borderBottomWidth: 1, borderBottomColor: "#f1f5f9" },
+  dropdownItemActive: { backgroundColor: "#eff6ff" },
+  dropdownItemText: { color: "#475569", fontSize: 14 },
+  dropdownItemTextActive: { color: "#2563eb", fontWeight: "700" },
+  addItemBtn: {
+    borderWidth: 2, borderColor: "#2563eb", borderStyle: "dashed",
+    borderRadius: 16, padding: 16, alignItems: "center",
+    backgroundColor: "rgba(37,99,235,0.03)",
+  },
+  addItemBtnText: { color: "#2563eb", fontSize: 14, fontWeight: "700" },
+  attachmentBtns: { flexDirection: "row", gap: 12, marginBottom: 12 },
+  attachBtn: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 8, paddingVertical: 12, borderRadius: 14, backgroundColor: "#fff",
+    borderWidth: 1.5, borderColor: "rgba(37,99,235,0.15)",
+  },
+  attachBtnIcon: { fontSize: 20 },
+  attachBtnText: { color: "#2563eb", fontSize: 13, fontWeight: "700" },
+  attachmentList: { gap: 8 },
+  attachmentItem: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: "#fff", borderRadius: 12, padding: 12,
+    borderWidth: 1, borderColor: "rgba(37,99,235,0.1)",
+  },
+  attachmentIcon: { fontSize: 16 },
+  attachmentName: { flex: 1, color: "#0f172a", fontSize: 13, fontWeight: "600" },
+  attachmentRemove: { color: "#ef4444", fontSize: 16, fontWeight: "700", padding: 4 },
+  btnRow: { flexDirection: "row", gap: 12 },
+  draftBtn: {
+    flex: 1, paddingVertical: 16, borderRadius: 14, backgroundColor: "#fff",
+    alignItems: "center", borderWidth: 1.5, borderColor: "#2563eb",
+  },
+  draftBtnText: { color: "#2563eb", fontSize: 15, fontWeight: "700" },
+  submitBtn: {
+    flex: 2, paddingVertical: 16, borderRadius: 14, backgroundColor: "#2563eb",
+    alignItems: "center", shadowColor: "#2563eb",
+    shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 14, elevation: 8,
+  },
+  submitBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  emptyText: { color: "#94a3b8", fontSize: 14 },
+});

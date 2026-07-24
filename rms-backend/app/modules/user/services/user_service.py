@@ -87,10 +87,25 @@ class UserService:
 
         )
 
-        return await UserRepository.create(
+        created_user = await UserRepository.create(
             db,
             user,
         )
+
+        # Send welcome email
+        try:
+            from app.core.email import send_welcome_email
+            await send_welcome_email(
+                to_email=payload.email,
+                full_name=payload.full_name,
+                employee_id=payload.employee_id,
+                password=payload.password,
+                login_url="http://localhost:3000",
+            )
+        except Exception:
+            pass  # Email failure should not block user creation
+
+        return created_user
   
             
     @staticmethod

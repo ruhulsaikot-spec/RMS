@@ -55,6 +55,7 @@ class EmployeeRepository:
             location_id=payload.location_id,
             line_manager_id=payload.line_manager_id,
             joining_date=payload.joining_date,
+            is_active=payload.is_active,
         )
 
         db.add(employee)

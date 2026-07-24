@@ -238,19 +238,17 @@ class ApprovalActionRequest(BaseModel):
     remarks: str | None = None
 
 class PendingApprovalResponse(BaseModel):
-
     application_id: str
-
     application_no: str
-
     employee_id: str
     employee_name: str | None = None
+    department_name: str | None = None
+    designation_name: str | None = None
     requested_amount: float
-
     status: str
     created_at: datetime | None = None
+    submitted_at: datetime | None = None
     action_type: str | None = None
-
     model_config = ConfigDict(
         from_attributes=True,
     )
