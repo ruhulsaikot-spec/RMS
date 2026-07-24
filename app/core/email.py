@@ -22,7 +22,7 @@ async def send_email(to_email: str, subject: str, html_body: str):
 
 
 async def send_otp_email(to_email: str, otp: str, user_name: str):
-    subject = "RMS \u2014 Password Reset OTP"
+    subject = "Expenora \u2014 Password Reset OTP"
     otp_digits = ""
     html_body = f"""<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -47,12 +47,12 @@ async def send_otp_email(to_email: str, otp: str, user_name: str):
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
               <tr>
                 <td style="background-color:#ffffff;border-radius:14px;padding:10px 24px;">
-                  <span style="color:#1d4ed8;font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:800;letter-spacing:4px;">RMS</span>
+                  <span style="color:#1d4ed8;font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:800;letter-spacing:4px;">Expenora</span>
                 </td>
               </tr>
             </table>
             <br />
-            <span style="color:rgba(255,255,255,0.85);font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;">REIMBURSEMENT MANAGEMENT SYSTEM</span>
+            <span style="color:rgba(255,255,255,0.85);font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;">Bringing Clarity to Enterprise Expenses</span>
           </td>
         </tr>
 
@@ -101,7 +101,7 @@ async def send_otp_email(to_email: str, otp: str, user_name: str):
                       </td>
                       <td valign="middle">
                         <span style="color:#1e293b;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:600;display:block;">Hello, <span style="color:#1d4ed8;">{user_name}</span></span>
-                        <span style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;display:block;margin-top:4px;">Use the OTP below to reset your RMS account password. This code is valid for <strong style="color:#1d4ed8;">10 minutes</strong> only.</span>
+                        <span style="color:#64748b;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;display:block;margin-top:4px;">Use the OTP below to reset your Expenora account password. This code is valid for <strong style="color:#1d4ed8;">10 minutes</strong> only.</span>
                       </td>
                     </tr>
                   </table>
@@ -140,7 +140,7 @@ async def send_otp_email(to_email: str, otp: str, user_name: str):
                         <div style="background-color:#1d4ed8;border-radius:50%;width:24px;height:24px;text-align:center;line-height:24px;"><span style="color:#ffffff;font-family:Arial,sans-serif;font-size:11px;font-weight:700;">1</span></div>
                       </td>
                       <td valign="middle" style="padding-left:4px;padding-bottom:10px;">
-                        <span style="color:#334155;font-family:Arial,Helvetica,sans-serif;font-size:13px;">Go back to the RMS login page</span>
+                        <span style="color:#334155;font-family:Arial,Helvetica,sans-serif;font-size:13px;">Go back to the Expenora login page</span>
                       </td>
                     </tr>
                     <tr>
@@ -192,8 +192,8 @@ async def send_otp_email(to_email: str, otp: str, user_name: str):
         <!-- FOOTER -->
         <tr>
           <td align="center" style="background-color:#f1f5f9;border-top:1px solid #e2e8f0;padding:24px 32px;border-radius:0 0 20px 20px;">
-            <span style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:11px;display:block;margin-bottom:6px;">&#128737; This is an automated message from RMS System</span>
-            <span style="color:#94a3b8;font-family:Arial,Helvetica,sans-serif;font-size:11px;display:block;">&copy; 2026 Reimbursement Management System.</span>
+            <span style="color:#475569;font-family:Arial,Helvetica,sans-serif;font-size:11px;display:block;margin-bottom:6px;">&#128737; This is an automated message from Expenora</span>
+            <span style="color:#94a3b8;font-family:Arial,Helvetica,sans-serif;font-size:11px;display:block;">&copy; 2026 Expenora.</span>
             <span style="color:#94a3b8;font-family:Arial,Helvetica,sans-serif;font-size:11px;display:block;">All rights reserved.</span>
           </td>
         </tr>
@@ -223,15 +223,15 @@ async def send_claim_submitted_email(
     email_type: str = "submitted",
 ):
     if email_type == "backed":
-        subject = f"RMS \u2014 Claim Returned to Your Stage [{application_no}]"
+        subject = f"Expenora \u2014 Claim Returned to Your Stage [{application_no}]"
         email_title = "Claim Returned to Your Stage"
         email_subtitle = "A claim has been sent back to your stage for re-review."
     elif email_type == "next_stage":
-        subject = f"RMS \u2014 Claim Awaiting Your Approval [{application_no}]"
+        subject = f"Expenora \u2014 Claim Awaiting Your Approval [{application_no}]"
         email_title = "Claim Awaiting Your Approval"
         email_subtitle = "A reimbursement claim has been forwarded to you for approval."
     else:
-        subject = f"RMS \u2014 New Claim for Approval [{application_no}]"
+        subject = f"Expenora \u2014 New Claim for Approval [{application_no}]"
         email_title = "New Claim for Approval"
         email_subtitle = "A reimbursement claim has been submitted and is awaiting your review."
 
@@ -293,10 +293,10 @@ async def send_claim_submitted_email(
       <tr><td style="background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 30%,#1d4ed8 65%,#0891b2 100%);padding:32px;text-align:center;">
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center"><tr>
           <td style="background-color:#ffffff;border-radius:12px;padding:8px 20px;">
-            <span style="color:#1d4ed8;font-size:20px;font-weight:800;letter-spacing:4px;">RMS</span>
+            <span style="color:#1d4ed8;font-size:20px;font-weight:800;letter-spacing:4px;">Expenora</span>
           </td>
         </tr></table>
-        <br /><span style="color:rgba(255,255,255,0.80);font-size:11px;letter-spacing:2px;text-transform:uppercase;">REIMBURSEMENT MANAGEMENT SYSTEM</span>
+        <br /><span style="color:rgba(255,255,255,0.80);font-size:11px;letter-spacing:2px;text-transform:uppercase;">Bringing Clarity to Enterprise Expenses</span>
       </td></tr>
 
       <!-- ICON -->
@@ -439,7 +439,7 @@ async def send_claim_submitted_email(
                   <div style="background-color:#f59e0b;border-radius:50%;width:28px;height:28px;text-align:center;line-height:28px;font-size:14px;">&#9888;</div>
                 </td>
                 <td valign="middle">
-                  <span style="color:#78350f;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;display:block;">This is an automated email from RMS.</span>
+                  <span style="color:#78350f;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;display:block;">This is an automated email from Expenora.</span>
                   <span style="color:#92400e;font-family:Arial,Helvetica,sans-serif;font-size:12px;display:block;">Please do not reply to this email.</span>
                   <span style="color:#92400e;font-family:Arial,Helvetica,sans-serif;font-size:12px;display:block;">If you have any questions, please contact our support team.</span>
                 </td>
@@ -461,7 +461,7 @@ async def send_claim_submitted_email(
               <span style="color:#94a3b8;font-family:Arial,Helvetica,sans-serif;font-size:11px;">support@company.com &nbsp;|&nbsp; +880 1234 567890</span>
             </td>
             <td valign="middle" align="right">
-              <span style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;display:block;">&copy; 2026 RMS</span>
+              <span style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;display:block;">&copy; 2026 Expenora</span>
               <span style="color:#94a3b8;font-family:Arial,Helvetica,sans-serif;font-size:11px;">All rights reserved.</span>
             </td>
           </tr>
@@ -497,7 +497,7 @@ async def send_claim_status_email(
             "badge_border": "#bfdbfe",
             "title": "Amount Verified",
             "subtitle": "Your reimbursement claim amount has been verified and is being processed.",
-            "subject": f"RMS \u2014 Your Claim Amount Has Been Verified [{application_no}]",
+            "subject": f"Expenora \u2014 Your Claim Amount Has Been Verified [{application_no}]",
             "btn_color": "#1d4ed8",
         },
         "APPROVED": {
@@ -508,7 +508,7 @@ async def send_claim_status_email(
             "badge_border": "#bbf7d0",
             "title": "Claim Approved",
             "subtitle": "Your reimbursement claim has been approved.",
-            "subject": f"RMS \u2014 Your Claim Has Been Approved [{application_no}]",
+            "subject": f"Expenora \u2014 Your Claim Has Been Approved [{application_no}]",
             "btn_color": "#16a34a",
         },
         "REJECTED": {
@@ -519,7 +519,7 @@ async def send_claim_status_email(
             "badge_border": "#fecaca",
             "title": "Claim Rejected",
             "subtitle": "Unfortunately, your reimbursement claim has been rejected.",
-            "subject": f"RMS \u2014 Your Claim Has Been Rejected [{application_no}]",
+            "subject": f"Expenora \u2014 Your Claim Has Been Rejected [{application_no}]",
             "btn_color": "#dc2626",
         },
         "RETURNED": {
@@ -530,7 +530,7 @@ async def send_claim_status_email(
             "badge_border": "#fde68a",
             "title": "Claim Returned for Revision",
             "subtitle": "Your reimbursement claim has been returned. Please review and resubmit.",
-            "subject": f"RMS \u2014 Your Claim Has Been Returned [{application_no}]",
+            "subject": f"Expenora \u2014 Your Claim Has Been Returned [{application_no}]",
             "btn_color": "#d97706",
         },
         "PAID": {
@@ -541,7 +541,7 @@ async def send_claim_status_email(
             "badge_border": "#bfdbfe",
             "title": "Payment Processed",
             "subtitle": "Your reimbursement has been successfully processed and paid.",
-            "subject": f"RMS \u2014 Your Claim Payment Has Been Processed [{application_no}]",
+            "subject": f"Expenora \u2014 Your Claim Payment Has Been Processed [{application_no}]",
             "btn_color": "#1d4ed8",
         },
     }
@@ -603,10 +603,10 @@ async def send_claim_status_email(
       <tr><td style="background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 30%,#1d4ed8 65%,#0891b2 100%);padding:32px;text-align:center;">
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center"><tr>
           <td style="background-color:#ffffff;border-radius:12px;padding:8px 20px;">
-            <span style="color:#1d4ed8;font-size:20px;font-weight:800;letter-spacing:4px;">RMS</span>
+            <span style="color:#1d4ed8;font-size:20px;font-weight:800;letter-spacing:4px;">Expenora</span>
           </td>
         </tr></table>
-        <br /><span style="color:rgba(255,255,255,0.80);font-size:11px;letter-spacing:2px;text-transform:uppercase;">REIMBURSEMENT MANAGEMENT SYSTEM</span>
+        <br /><span style="color:rgba(255,255,255,0.80);font-size:11px;letter-spacing:2px;text-transform:uppercase;">Bringing Clarity to Enterprise Expenses</span>
       </td></tr>
 
       <!-- STATUS ICON -->
@@ -747,7 +747,7 @@ async def send_claim_status_email(
                   <div style="background-color:#f59e0b;border-radius:50%;width:28px;height:28px;text-align:center;line-height:28px;font-size:14px;">&#9888;</div>
                 </td>
                 <td valign="middle">
-                  <span style="color:#78350f;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;display:block;">This is an automated email from RMS.</span>
+                  <span style="color:#78350f;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;display:block;">This is an automated email from Expenora.</span>
                   <span style="color:#92400e;font-family:Arial,Helvetica,sans-serif;font-size:12px;display:block;">Please do not reply to this email.</span>
                   <span style="color:#92400e;font-family:Arial,Helvetica,sans-serif;font-size:12px;display:block;">If you have any questions, please contact our support team.</span>
                 </td>
@@ -769,7 +769,7 @@ async def send_claim_status_email(
               <span style="color:#94a3b8;font-family:Arial,Helvetica,sans-serif;font-size:11px;">support@company.com &nbsp;|&nbsp; +880 1234 567890</span>
             </td>
             <td valign="middle" align="right">
-              <span style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;display:block;">&copy; 2026 RMS</span>
+              <span style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;display:block;">&copy; 2026 Expenora</span>
               <span style="color:#94a3b8;font-family:Arial,Helvetica,sans-serif;font-size:11px;">All rights reserved.</span>
             </td>
           </tr>
