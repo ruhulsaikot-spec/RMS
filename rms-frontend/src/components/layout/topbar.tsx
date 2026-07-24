@@ -5,7 +5,6 @@ import {
 import { useRouter } from "next/navigation";
 import { useUser } from "@/contexts/user-context";
 import NotificationBell from "@/components/shared/notification-bell";
-import { apiClient } from "@/lib/api-client";
 
 type TopbarProps = {
   title: string;
@@ -110,14 +109,14 @@ export default function Topbar({
         </div>
 
         <button
-          onClick={async () => {
-            try {
-              await apiClient.post("/auth/logout-cookie");
-            } catch {}
+          onClick={() => {
+
             localStorage.removeItem("access_token");
             localStorage.removeItem("refresh_token");
             localStorage.removeItem("user");
+
             router.replace("/");
+
           }}
           className="
           flex

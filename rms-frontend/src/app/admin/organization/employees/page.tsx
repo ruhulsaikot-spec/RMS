@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Search, Plus, Users, X, Download, Upload } from "lucide-react";
 import Sidebar from "@/components/layout/sidebar";
@@ -238,7 +238,6 @@ export default function EmployeesPage() {
                 </select>
 
                 <div className="ml-auto flex items-center gap-2">
-                  {/* Download Template */}
                   <ActionGuard permission="employee:create">
                     <button
                       onClick={async () => {
@@ -259,8 +258,6 @@ export default function EmployeesPage() {
                       <Download size={13} /> Template
                     </button>
                   </ActionGuard>
-
-                  {/* Bulk Upload */}
                   <ActionGuard permission="employee:create">
                     <label className="flex items-center gap-1.5 rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-2 text-xs font-semibold text-green-300 hover:bg-green-500/20 transition-colors cursor-pointer">
                       <Upload size={13} /> Bulk Upload
@@ -290,7 +287,6 @@ export default function EmployeesPage() {
                       />
                     </label>
                   </ActionGuard>
-
                   <ActionGuard permission="employee:create">
                     <button onClick={openNew}
                       className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-2 text-xs font-semibold text-black hover:opacity-90 transition-opacity">

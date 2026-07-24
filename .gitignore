@@ -1,46 +1,42 @@
-# ------------------------
-# Python
-# ------------------------
-.venv/
-venv/
-env/
+﻿# Python
 __pycache__/
 *.py[cod]
 *.pyo
-
-# ------------------------
-# FastAPI
-# ------------------------
-.pytest_cache/
-.mypy_cache/
-
-# ------------------------
-# Node.js / Next.js
-# ------------------------
-node_modules/
-.next/
-out/
-
-# ------------------------
-# Environment
-# ------------------------
+*.pyd
+.Python
+*.so
 .env
 .env.*
 !.env.example
 
-# ------------------------
+# Virtual Environment
+venv/
+env/
+.venv/
+
+# Docker
+.dockerignore
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+
+# Uploads
+uploads/
+
 # IDE
-# ------------------------
 .vscode/
 .idea/
+*.swp
+*.swo
 
-# ------------------------
 # OS
-# ------------------------
-Thumbs.db
 .DS_Store
+Thumbs.db
 
-# ------------------------
-# Logs
-# ------------------------
-*.log
+rms-mobile/*.apk
+rms-mobile/dev-build*.apk
