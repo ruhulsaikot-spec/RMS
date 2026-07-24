@@ -47,3 +47,6 @@ rms-frontend/node_modules/
 rms-monorepo/
 
 rms-frontend/.next/
+
+rms-frontend/
+rms-backend/
