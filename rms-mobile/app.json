@@ -1,25 +1,35 @@
 {
   "expo": {
-    "name": "RMS",
+    "name": "Expenora",
     "slug": "rms-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "scheme": "rms",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#ffffff"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.wyzetech.rms"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#030B1F",
-        "foregroundImage": "./assets/icon.png"
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png",
+        "backgroundColor": "#ffffff"
       },
       "package": "com.wyzetech.expenora",
       "predictiveBackGestureEnabled": false,
       "usesCleartextTraffic": true,
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "notification": {
+        "icon": "./assets/notification.png",
+        "color": "#2563eb"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -30,8 +40,8 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/icon.png",
-          "color": "#0891b2"
+          "icon": "./assets/notification.png",
+          "color": "#2563eb"
         }
       ],
       [

@@ -54,7 +54,11 @@ export default function AppLayout() {
       />
       <Tabs.Screen
         name="claims/[id]"
-        options={{ tabBarButton: () => <></>, tabBarItemStyle: { display: "none" } }}
+        options={{ tabBarButton: () => null, tabBarItemStyle: { display: "none" } }}
+      />
+      <Tabs.Screen
+        name="claims/details"
+        options={{ tabBarButton: () => null, tabBarItemStyle: { display: "none" } }}
       />
       <Tabs.Screen
         name="approvals/[id]"

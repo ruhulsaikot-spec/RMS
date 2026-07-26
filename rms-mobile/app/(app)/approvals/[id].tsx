@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView,
   TouchableOpacity, ActivityIndicator, Alert, Linking, TextInput,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView, Platform, BackHandler,
 } from "react-native";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { useCallback } from "react";
@@ -55,6 +55,12 @@ export default function ApprovalDetailScreen() {
       setPaymentMethodId("");
       loadClaim();
       loadPaymentMethods();
+
+      const backHandler = BackHandler.addEventListener("hardwareBackPress", () => {
+        router.replace("/(app)/approvals" as any);
+        return true;
+      });
+      return () => backHandler.remove();
     }, [id])
   );
 

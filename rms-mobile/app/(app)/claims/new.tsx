@@ -1,10 +1,12 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { useFocusEffect } from "expo-router";
 import {
   View, Text, StyleSheet, ScrollView,
   TouchableOpacity, TextInput, ActivityIndicator,
-  Alert, Animated, Dimensions,
+  Alert, Animated, Dimensions, Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { BackHandler } from "react-native";
 import { apiClient } from "../../../src/lib/api-client";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
@@ -251,6 +253,7 @@ export default function NewClaimScreen() {
   const [showDatePicker, setShowDatePicker] = useState<number | null>(null);
   const [attachments, setAttachments] = useState<any[]>([]);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [authToken, setAuthToken] = useState<string | null>(null);
   const [remarks, setRemarks] = useState("");
   const [expenseItems, setExpenseItems] = useState<any[]>([{
     id: Date.now(), expense_type_id: null, expense_type_name: "",
@@ -261,7 +264,35 @@ export default function NewClaimScreen() {
   useEffect(() => {
     loadExpenseTypes();
     loadProjects();
+    loadToken();
   }, []);
+
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener("hardwareBackPress", () => {
+      router.replace("/(app)/claims" as any);
+      return true;
+    });
+    return () => backHandler.remove();
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      // Reset form every time page is focused
+      setExpenseItems([{
+        id: Date.now(), expense_type_id: null, expense_type_name: "",
+        amount: "", purpose: "", claim_date: new Date().toISOString().split("T")[0],
+        mode: "", project_id: null, project_name: "", from_location: "", to_location: "",
+      }]);
+      setRemarks("");
+      setAttachments([]);
+    }, [])
+  );
+
+  const loadToken = async () => {
+    const SecureStore = await import("expo-secure-store");
+    const token = await SecureStore.getItemAsync("access_token");
+    setAuthToken(token);
+  };
 
   const addExpenseItem = () => {
     setExpenseItems(prev => [...prev, {
@@ -315,6 +346,7 @@ export default function NewClaimScreen() {
   };
 
   const pickDocument = async () => {
+    console.log("pickDocument called");
     const result = await DocumentPicker.getDocumentAsync({
       type: [
         "application/pdf",
@@ -326,8 +358,10 @@ export default function NewClaimScreen() {
       ],
       copyToCacheDirectory: true,
     });
+    console.log("Document result:", JSON.stringify(result));
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
+      console.log("Asset URI:", asset.uri, "Name:", asset.name);
       const ext = asset.name.split(".").pop()?.toLowerCase() || "";
       const mimeMap: Record<string, string> = {
         pdf: "application/pdf",
@@ -345,33 +379,45 @@ export default function NewClaimScreen() {
   const uploadAttachment = async (uri: string, name: string, mimeType: string) => {
     try {
       setUploadingAttachment(true);
-      const token = await (await import("expo-secure-store")).getItemAsync("access_token");
-      
-      const formData = new FormData();
-      formData.append("file", {
-        uri: uri,
-        type: mimeType,
-        name: name,
-      } as any);
+      const token = authToken;
+      console.log("Uploading via XMLHttpRequest...", uri, mimeType, name);
+      console.log("Token available:", !!token);
 
-      const response = await fetch("http://192.168.0.102:8000/api/files/upload", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Accept": "application/json",
-        },
-        body: formData,
-      });
+      const uploadWithRetry = async (retries = 2): Promise<any> => {
+        return new Promise<any>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("POST", "http://192.168.0.102:8000/api/files/upload");
+          xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve(JSON.parse(xhr.responseText));
+            } else {
+              reject(new Error("Upload failed: " + xhr.responseText));
+            }
+          };
+          xhr.onerror = async () => {
+            if (retries > 0) {
+              console.log("Retrying upload...", retries);
+              await new Promise(r => setTimeout(r, 500));
+              uploadWithRetry(retries - 1).then(resolve).catch(reject);
+            } else {
+              reject(new Error("Network error"));
+            }
+          };
+          xhr.ontimeout = () => reject(new Error("Timeout"));
+          xhr.timeout = 30000;
 
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err?.detail || "Upload failed");
-      }
+          const formData = new FormData();
+          formData.append("file", { uri, type: mimeType, name } as any);
+          xhr.send(formData);
+        });
+      };
 
-      const data = await response.json();
+      const data = await uploadWithRetry();
+
       setAttachments(prev => [...prev, {
         id: data.id,
-        name: data.original_name,
+        name: data.original_name || name,
         storage_path: data.storage_path,
       }]);
     } catch (e: any) {
@@ -421,10 +467,21 @@ export default function NewClaimScreen() {
       }]);
       setRemarks("");
       setAttachments([]);
+      // Reset form
+      setExpenseItems([{
+        id: Date.now(), expense_type_id: null, expense_type_name: "",
+        amount: "", purpose: "", claim_date: new Date().toISOString().split("T")[0],
+        mode: "", project_id: null, project_name: "", from_location: "", to_location: "",
+      }]);
+      setRemarks("");
+      setAttachments([]);
+
       Alert.alert(
         "Success",
-        isDraft ? "Claim saved as draft" : "Claim submitted successfully",
-        [{ text: "OK", onPress: () => router.back() }]
+        isDraft 
+          ? `Claim saved as draft\nClaim ID: ${res.data.application_no}` 
+          : `Claim submitted successfully\nClaim ID: ${res.data.application_no}`,
+        [{ text: "OK", onPress: () => router.replace("/(app)/claims" as any) }]
       );
     } catch (e: any) {
       console.log("Claim error:", JSON.stringify(e?.response?.data));
@@ -441,7 +498,7 @@ export default function NewClaimScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.replace("/(app)/claims" as any)}>
           <View style={styles.backBtnInner}>
             <Text style={styles.backIcon}>‹</Text>
           </View>

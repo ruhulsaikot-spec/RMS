@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   View, Text, StyleSheet, FlatList,
-  TouchableOpacity, ActivityIndicator, RefreshControl, Alert,
+  TouchableOpacity, ActivityIndicator, RefreshControl, Alert, TextInput, BackHandler,
 } from "react-native";
 import { apiClient } from "../../src/lib/api-client";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -26,6 +26,7 @@ export default function ApprovalsScreen() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [showFilter, setShowFilter] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
   const router = useRouter();
 
   useEffect(() => { loadApprovals(); }, []);
@@ -33,34 +34,42 @@ export default function ApprovalsScreen() {
   useFocusEffect(
     useCallback(() => {
       loadApprovals();
+      const backHandler = BackHandler.addEventListener("hardwareBackPress", () => {
+        router.replace("/(app)/dashboard" as any);
+        return true;
+      });
+      return () => backHandler.remove();
     }, [])
   );
 
   useEffect(() => {
-    applyFilter(approvals, selectedFilter);
-  }, [selectedFilter, approvals]);
+    applyFilter(approvals, selectedFilter, searchQuery);
+  }, [selectedFilter, approvals, searchQuery]);
 
-  const applyFilter = (data: any[], filter: string) => {
+  const applyFilter = (data: any[], filter: string, search: string = searchQuery) => {
     const now = new Date();
-    if (filter === "ALL") {
-      setFilteredApprovals(data);
-      return;
+    let filtered = data;
+    if (filter !== "ALL") {
+      filtered = filtered.filter((item) => {
+        const date = new Date(item.submitted_at || item.created_at || "");
+        if (filter === "TODAY") return date.toDateString() === now.toDateString();
+        if (filter === "THIS_WEEK") {
+          const weekAgo = new Date(now);
+          weekAgo.setDate(now.getDate() - 7);
+          return date >= weekAgo;
+        }
+        if (filter === "THIS_MONTH") {
+          return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+        }
+        return true;
+      });
     }
-    const filtered = data.filter((item) => {
-      const date = new Date(item.submitted_at || item.created_at || "");
-      if (filter === "TODAY") {
-        return date.toDateString() === now.toDateString();
-      }
-      if (filter === "THIS_WEEK") {
-        const weekAgo = new Date(now);
-        weekAgo.setDate(now.getDate() - 7);
-        return date >= weekAgo;
-      }
-      if (filter === "THIS_MONTH") {
-        return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-      }
-      return true;
-    });
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      filtered = filtered.filter(item =>
+        (item.application_no || "").toLowerCase().includes(q)
+      );
+    }
     setFilteredApprovals(filtered);
   };
 
@@ -187,6 +196,23 @@ export default function ApprovalsScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Search Bar */}
+      <View style={styles.searchBar}>
+        <Text style={styles.searchIcon}>🔍</Text>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search by claim ID..."
+          placeholderTextColor="#94a3b8"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery("")}>
+            <Text style={{ color: "#94a3b8", fontSize: 16 }}>✕</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
       {/* Filter Modal */}
       {showFilter && (
         <View style={styles.filterModal}>
@@ -258,6 +284,19 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 20, paddingTop: 56, paddingBottom: 20,
     gap: 16,
+  },
+  searchBar: {
+    flexDirection: "row", alignItems: "center",
+    marginHorizontal: 16, marginBottom: 12,
+    backgroundColor: "#fff", borderRadius: 14,
+    paddingHorizontal: 14, paddingVertical: 10,
+    borderWidth: 1, borderColor: "rgba(37,99,235,0.1)",
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
+  },
+  searchIcon: { fontSize: 16, marginRight: 8 },
+  searchInput: {
+    flex: 1, fontSize: 13, color: "#0f172a",
   },
   backBtn: {
     shadowColor: "#2563eb",

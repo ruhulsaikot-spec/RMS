@@ -5,10 +5,119 @@ import {
   Alert, Animated, Dimensions,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { BackHandler } from "react-native";
 import { apiClient } from "../../../src/lib/api-client";
 import * as DocumentPicker from "expo-document-picker";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
+const MODAL_PADDING = 20;
+const CELL_SIZE = Math.floor((SCREEN_WIDTH * 0.75 - 24) / 7);
+
+function DatePickerModal({
+  visible, value, onClose, onSelect,
+}: {
+  visible: boolean;
+  value: string;
+  onClose: () => void;
+  onSelect: (date: string) => void;
+}) {
+  const today = new Date();
+  const [year, setYear] = useState(value ? parseInt(value.split("-")[0]) : today.getFullYear());
+  const [month, setMonth] = useState(value ? parseInt(value.split("-")[1]) - 1 : today.getMonth());
+  const months = ["January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"];
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDay = new Date(year, month, 1).getDay();
+  const selectedDay = value && parseInt(value.split("-")[0]) === year && parseInt(value.split("-")[1]) - 1 === month
+    ? parseInt(value.split("-")[2]) : null;
+  const prevMonth = () => {
+    if (month === 0) { setMonth(11); setYear(y => y - 1); }
+    else setMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (month === 11) { setMonth(0); setYear(y => y + 1); }
+    else setMonth(m => m + 1);
+  };
+  if (!visible) return null;
+  const totalCells = Math.ceil((firstDay + daysInMonth) / 7) * 7;
+  const cells = Array.from({ length: totalCells }, (_, i) => {
+    const day = i - firstDay + 1;
+    return day >= 1 && day <= daysInMonth ? day : null;
+  });
+  const rows: (number | null)[][] = [];
+  for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
+  return (
+    <View style={dpStyles.overlay}>
+      <View style={dpStyles.modal}>
+        <View style={dpStyles.header}>
+          <TouchableOpacity onPress={prevMonth} style={dpStyles.navBtn}>
+            <Text style={dpStyles.navBtnText}>‹</Text>
+          </TouchableOpacity>
+          <Text style={dpStyles.headerText}>{months[month]} {year}</Text>
+          <TouchableOpacity onPress={nextMonth} style={dpStyles.navBtn}>
+            <Text style={dpStyles.navBtnText}>›</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={dpStyles.row}>
+          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => (
+            <View key={d} style={dpStyles.cell}>
+              <Text style={dpStyles.dayLabel}>{d}</Text>
+            </View>
+          ))}
+        </View>
+        {rows.map((row, ri) => (
+          <View key={ri} style={dpStyles.row}>
+            {row.map((day, di) => (
+              <TouchableOpacity
+                key={di}
+                style={[dpStyles.cell, day === selectedDay && dpStyles.selectedCell]}
+                onPress={() => {
+                  if (day) {
+                    const d = String(day).padStart(2, "0");
+                    const m = String(month + 1).padStart(2, "0");
+                    onSelect(`${year}-${m}-${d}`);
+                    onClose();
+                  }
+                }}
+                disabled={!day}
+              >
+                <Text style={[dpStyles.dayText, day === selectedDay && dpStyles.selectedDayText, !day && { opacity: 0 }]}>
+                  {day ?? ""}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ))}
+        <TouchableOpacity style={dpStyles.cancelBtn} onPress={onClose}>
+          <Text style={dpStyles.cancelText}>Cancel</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const dpStyles = StyleSheet.create({
+  overlay: {
+    position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", zIndex: 999,
+  },
+  modal: {
+    backgroundColor: "#fff", borderRadius: 20, padding: 16,
+    width: SCREEN_WIDTH * 0.85,
+  },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  navBtn: { padding: 8 },
+  navBtnText: { fontSize: 20, color: "#2563eb", fontWeight: "700" },
+  headerText: { fontSize: 15, fontWeight: "700", color: "#0f172a" },
+  row: { flexDirection: "row" },
+  cell: { width: CELL_SIZE, height: CELL_SIZE, justifyContent: "center", alignItems: "center" },
+  dayLabel: { fontSize: 11, color: "#94a3b8", fontWeight: "600" },
+  dayText: { fontSize: 13, color: "#0f172a" },
+  selectedCell: { backgroundColor: "#2563eb", borderRadius: CELL_SIZE / 2 },
+  selectedDayText: { color: "#fff", fontWeight: "700" },
+  cancelBtn: { marginTop: 12, padding: 10, alignItems: "center" },
+  cancelText: { color: "#ef4444", fontSize: 13, fontWeight: "600" },
+});
 
 const STATUS_COLORS: Record<string, { text: string; bg: string }> = {
   DRAFT: { text: "#64748b", bg: "#f1f5f9" },
@@ -97,14 +206,110 @@ export default function ClaimEditScreen() {
   const [expenseTypes, setExpenseTypes] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [showProjectDropdown, setShowProjectDropdown] = useState<number | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState<number | null>(null);
   const [attachments, setAttachments] = useState<any[]>([]);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [authToken, setAuthToken] = useState<string | null>(null);
   const [remarks, setRemarks] = useState("");
   const [expenseItems, setExpenseItems] = useState<any[]>([]);
 
   useEffect(() => {
     loadData();
+    loadToken();
   }, [id]);
+
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener("hardwareBackPress", () => {
+      router.replace("/(app)/claims" as any);
+      return true;
+    });
+    return () => backHandler.remove();
+  }, []);
+
+  const loadToken = async () => {
+    const SecureStore = await import("expo-secure-store");
+    const token = await SecureStore.getItemAsync("access_token");
+    setAuthToken(token);
+  };
+
+  const pickDocument = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ["application/pdf", "image/jpeg", "image/jpg", "image/png",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+      copyToCacheDirectory: true,
+    });
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      const ext = asset.name.split(".").pop()?.toLowerCase() || "";
+      const mimeMap: Record<string, string> = {
+        pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg",
+        png: "image/png",
+        xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      };
+      const mimeType = mimeMap[ext] || asset.mimeType || "application/octet-stream";
+      await uploadAttachment(asset.uri, asset.name, mimeType);
+    }
+  };
+
+  const uploadAttachment = async (uri: string, name: string, mimeType: string) => {
+    try {
+      setUploadingAttachment(true);
+      // Get fresh token each time
+      const SecureStore = await import("expo-secure-store");
+      const token = await SecureStore.getItemAsync("access_token");
+      console.log("Uploading...", uri, mimeType, name);
+      console.log("Token:", !!token);
+
+      const uploadWithRetry = async (retries = 2): Promise<any> => {
+        return new Promise<any>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("POST", "http://192.168.0.102:8000/api/files/upload");
+          xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve(JSON.parse(xhr.responseText));
+            } else {
+              reject(new Error("Upload failed: " + xhr.responseText));
+            }
+          };
+          xhr.onerror = async () => {
+            if (retries > 0) {
+              console.log("Retrying upload...", retries);
+              await new Promise(r => setTimeout(r, 500));
+              uploadWithRetry(retries - 1).then(resolve).catch(reject);
+            } else {
+              reject(new Error("Network error"));
+            }
+          };
+          xhr.ontimeout = () => reject(new Error("Timeout"));
+          xhr.timeout = 30000;
+
+          const formData = new FormData();
+          formData.append("file", { uri, type: mimeType, name } as any);
+          xhr.send(formData);
+        });
+      };
+
+      const data = await uploadWithRetry();
+
+      setAttachments(prev => [...prev, {
+        id: data.id,
+        name: data.original_name || name,
+        storage_path: data.storage_path,
+      }]);
+    } catch (e: any) {
+      console.log("Upload error:", e?.message);
+      Alert.alert("Error", e?.message || "Failed to upload attachment");
+    } finally {
+      setUploadingAttachment(false);
+    }
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachments(prev => prev.filter((a: any) => a.id !== id));
+  };
 
   useEffect(() => {
     console.log("expenseItems updated:", expenseItems.length);
@@ -206,35 +411,7 @@ export default function ClaimEditScreen() {
 
   const totalAmount = expenseItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
-  const pickDocument = async () => {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: ["application/pdf", "image/jpeg", "image/png"],
-      copyToCacheDirectory: true,
-    });
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      try {
-        setUploadingAttachment(true);
-        const token = await (await import("expo-secure-store")).getItemAsync("access_token");
-        const formData = new FormData();
-        formData.append("file", { uri: asset.uri, name: asset.name, type: asset.mimeType || "application/octet-stream" } as any);
-        const response = await fetch("http://192.168.0.102:8000/api/files/upload", {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${token}`, "Accept": "application/json" },
-          body: formData,
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setAttachments(prev => [...prev, { id: data.id, name: data.original_name }]);
-        }
-      } catch (e) {
-        Alert.alert("Error", "Failed to upload attachment");
-      } finally {
-        setUploadingAttachment(false);
-      }
-    }
-  };
-
+  
   const handleSave = async (isDraft: boolean) => {
     const validItems = expenseItems.filter(item => item.expense_type_id && item.amount);
     if (validItems.length === 0) {
@@ -365,28 +542,17 @@ export default function ClaimEditScreen() {
                     />
                   </View>
                   <View style={styles.halfField}>
-                    <View style={styles.dateWrapper}>
+                    <TouchableOpacity
+                      style={styles.dateWrapper}
+                      onPress={() => setShowDatePicker(item.id)}
+                    >
                       <Text style={styles.dateIcon}>📅</Text>
-                      <TextInput
-                        style={styles.dateInput}
-                        placeholder="DD/MM/YYYY"
-                        placeholderTextColor="#94a3b8"
-                        keyboardType="number-pad"
-                        maxLength={10}
-                        value={item.claim_date_display || ""}
-                        onChangeText={(text) => {
-                          const cleaned = text.replace(/\D/g, "");
-                          let display = cleaned;
-                          if (cleaned.length > 2) display = cleaned.slice(0, 2) + "/" + cleaned.slice(2);
-                          if (cleaned.length > 4) display = cleaned.slice(0, 2) + "/" + cleaned.slice(2, 4) + "/" + cleaned.slice(4, 8);
-                          updateExpenseItem(item.id, "claim_date_display", display);
-                          if (cleaned.length === 8) {
-                            const stored = `${cleaned.slice(4, 8)}-${cleaned.slice(2, 4)}-${cleaned.slice(0, 2)}`;
-                            updateExpenseItem(item.id, "claim_date", stored);
-                          }
-                        }}
-                      />
-                    </View>
+                      <Text style={[styles.dateInput, { paddingVertical: 0, color: item.claim_date ? "#0f172a" : "#94a3b8" }]}>
+                        {item.claim_date
+                          ? item.claim_date.split("-").reverse().join("-")
+                          : "DD-MM-YYYY"}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
 
@@ -492,6 +658,18 @@ export default function ClaimEditScreen() {
 
           <View style={{ height: 40 }} />
         </ScrollView>
+      )}
+      {/* Date Picker Modal */}
+      {showDatePicker !== null && (
+        <DatePickerModal
+          visible={true}
+          value={expenseItems.find(i => i.id === showDatePicker)?.claim_date || ""}
+          onClose={() => setShowDatePicker(null)}
+          onSelect={(date) => {
+            updateExpenseItem(showDatePicker, "claim_date", date);
+            setShowDatePicker(null);
+          }}
+        />
       )}
     </View>
   );

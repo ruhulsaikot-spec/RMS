@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
 import {
   View, Text, StyleSheet, FlatList,
   TouchableOpacity, ActivityIndicator, RefreshControl,
+  TextInput,
 } from "react-native";
+import { useRouter, useFocusEffect } from "expo-router";
+import { useState, useEffect, useCallback } from "react";
 import { apiClient } from "../../../src/lib/api-client";
-import { useRouter } from "expo-router";
+import { BackHandler } from "react-native";
 
 const STATUS_COLORS: Record<string, { text: string; bg: string }> = {
   DRAFT: { text: "#64748b", bg: "#f1f5f9" },
@@ -32,21 +34,43 @@ export default function ClaimsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
   const [expenseTypeMap, setExpenseTypeMap] = useState<Record<string, string>>({});
   const router = useRouter();
 
   useEffect(() => {
     loadExpenseTypes();
-    loadClaims();
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      const backHandler = BackHandler.addEventListener("hardwareBackPress", () => {
+        router.replace("/(app)/dashboard" as any);
+        return true;
+      });
+      return () => backHandler.remove();
+    }, [])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      loadClaims();
+    }, [])
+  );
+
   useEffect(() => {
-    if (selectedStatus === "ALL") {
-      setFilteredClaims(claims);
-    } else {
-      setFilteredClaims(claims.filter(c => c.status === selectedStatus));
+    let filtered = claims;
+    if (selectedStatus !== "ALL") {
+      filtered = filtered.filter(c => c.status === selectedStatus);
     }
-  }, [selectedStatus, claims]);
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      filtered = filtered.filter(c =>
+        (c.application_no || "").toLowerCase().includes(q)
+      );
+    }
+    setFilteredClaims(filtered);
+  }, [selectedStatus, claims, searchQuery]);
 
   const loadExpenseTypes = async () => {
     try {
@@ -93,7 +117,7 @@ export default function ClaimsScreen() {
   const renderClaim = ({ item }: { item: any }) => {
     const statusStyle = STATUS_COLORS[item.status] || STATUS_COLORS.DRAFT;
     return (
-      <TouchableOpacity activeOpacity={0.85} style={styles.cardGradientBorder}>
+      <TouchableOpacity activeOpacity={0.85} style={styles.cardGradientBorder} onPress={() => router.push(`/(app)/claims/details?id=${item.id}` as any)}>
         <View style={styles.card}>
           <View style={styles.cardTop}>
             <View style={styles.iconBox}>
@@ -158,7 +182,7 @@ export default function ClaimsScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.replace("/(app)/dashboard" as any)}>
           <View style={styles.backBtnInner}>
             <Text style={styles.backIcon}>‹</Text>
           </View>
@@ -180,6 +204,23 @@ export default function ClaimsScreen() {
           <Text style={styles.filterIcon}>🔽</Text>
           {selectedStatus !== "ALL" && <View style={styles.filterDot} />}
         </TouchableOpacity>
+      </View>
+
+      {/* Search Bar */}
+      <View style={styles.searchBar}>
+        <Text style={styles.searchIcon}>🔍</Text>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search by claim ID..."
+          placeholderTextColor="#94a3b8"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery("")}>
+            <Text style={{ color: "#94a3b8", fontSize: 16 }}>✕</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Filter Modal */}
@@ -236,6 +277,19 @@ export default function ClaimsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#eef2ff" },
   center: { flex: 1, justifyContent: "center", alignItems: "center", marginTop: 100 },
+  searchBar: {
+    flexDirection: "row", alignItems: "center",
+    marginHorizontal: 20, marginBottom: 12,
+    backgroundColor: "#fff", borderRadius: 14,
+    paddingHorizontal: 14, paddingVertical: 10,
+    borderWidth: 1, borderColor: "rgba(37,99,235,0.1)",
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
+  },
+  searchIcon: { fontSize: 16, marginRight: 8 },
+  searchInput: {
+    flex: 1, fontSize: 13, color: "#0f172a",
+  },
   topGlow: {
     position: "absolute", top: -80, right: -80,
     width: 250, height: 250, borderRadius: 125,

@@ -24,11 +24,23 @@ export default function DashboardScreen() {
   const [stats, setStats] = useState({ total: 0, pending: 0, paid: 0, rejected: 0 });
   const [unreadCount, setUnreadCount] = useState(0);
   const [showSidebar, setShowSidebar] = useState(false);
+  const [profilePicture, setProfilePicture] = useState<string | null>(null);
 
   useEffect(() => {
     loadStats();
     loadUnreadCount();
+    loadProfilePicture();
   }, []);
+
+  const loadProfilePicture = async () => {
+    try {
+      const res = await apiClient.get("/employees/");
+      const emp = (res.data || []).find((e: any) => e.employee_id === user?.employee_id);
+      if (emp?.profile_picture) {
+        setProfilePicture(emp.profile_picture);
+      }
+    } catch {}
+  };
 
   const loadStats = async () => {
     try {
@@ -101,9 +113,16 @@ export default function DashboardScreen() {
               {/* User Info */}
               <View style={styles.sidebarUser}>
                 <View style={styles.sidebarAvatar}>
-                  <Text style={styles.sidebarAvatarText}>
-                    {user?.full_name?.split(" ").map((w: string) => w[0]).join("").substring(0, 2)}
-                  </Text>
+                  {profilePicture ? (
+                    <Image
+                      source={{ uri: `http://192.168.0.102:8000/${profilePicture}` }}
+                      style={{ width: 46, height: 46, borderRadius: 23 }}
+                    />
+                  ) : (
+                    <Text style={styles.sidebarAvatarText}>
+                      {user?.full_name?.split(" ").map((w: string) => w[0]).join("").substring(0, 2)}
+                    </Text>
+                  )}
                 </View>
                 <View>
                   <Text style={styles.sidebarUserName}>{user?.full_name}</Text>
@@ -174,9 +193,16 @@ export default function DashboardScreen() {
             )}
           </TouchableOpacity>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {user?.full_name?.split(" ").map((w: string) => w[0]).join("").substring(0, 2)}
-            </Text>
+            {profilePicture ? (
+              <Image
+                source={{ uri: `http://192.168.0.102:8000/${profilePicture}` }}
+                style={{ width: 38, height: 38, borderRadius: 19 }}
+              />
+            ) : (
+              <Text style={styles.avatarText}>
+                {user?.full_name?.split(" ").map((w: string) => w[0]).join("").substring(0, 2)}
+              </Text>
+            )}
             <View style={styles.onlineDot} />
           </View>
         </View>
@@ -235,12 +261,7 @@ export default function DashboardScreen() {
               <View style={[styles.actionIconBox, { backgroundColor: action.bg }]}>
                 <Text style={styles.actionIcon}>{action.icon}</Text>
               </View>
-              <View style={styles.actionBottom}>
-                <Text style={styles.actionLabel}>{action.label}</Text>
-                <View style={[styles.actionArrow, { backgroundColor: action.bg }]}>
-                  <Text style={[styles.actionArrowText, { color: action.color }]}>→</Text>
-                </View>
-              </View>
+              <Text style={[styles.actionLabel, { color: action.color }]} numberOfLines={1}>{action.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -387,9 +408,11 @@ const styles = StyleSheet.create({
   },
   actionsGrid: { flexDirection: "row", paddingHorizontal: 16, gap: 12 },
   actionCard: {
-    flex: 1, backgroundColor: "#fff", borderRadius: 20, padding: 16, gap: 24,
+    flex: 1, backgroundColor: "#fff", borderRadius: 20, padding: 14,
+    alignItems: "center", justifyContent: "center", gap: 8,
     shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
+    minHeight: 110,
   },
   actionIconBox: {
     width: 44, height: 44, borderRadius: 12,
@@ -397,7 +420,7 @@ const styles = StyleSheet.create({
   },
   actionIcon: { fontSize: 22 },
   actionBottom: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", overflow: "hidden" },
-  actionLabel: { color: "#0f172a", fontSize: 12, fontWeight: "700", flex: 1, flexShrink: 1 },
+  actionLabel: { color: "#0f172a", fontSize: 11, fontWeight: "700", textAlign: "center" },
   actionArrow: {
     width: 28, height: 28, borderRadius: 14,
     justifyContent: "center", alignItems: "center",
