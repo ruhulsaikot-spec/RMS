@@ -6,6 +6,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { BackHandler } from "react-native";
 import { apiClient } from "../../../src/lib/api-client";
+const API_BASE_URL = (apiClient.defaults.baseURL || "http://192.168.0.102:8000/api").replace("/api", "");
 import * as Linking from "expo-linking";
 
 const STATUS_COLORS: Record<string, { text: string; bg: string }> = {
@@ -100,9 +101,12 @@ export default function ClaimDetailsScreen() {
         </View>
         <TouchableOpacity
           style={styles.reportBtn}
-          onPress={() => {
-            const url = `http://192.168.0.102:3000/admin/reports/claim-pdf/${claim.id}`;
-            Linking.openURL(url);
+          onPress={async () => {
+            const SecureStore = await import("expo-secure-store");
+            const token = await SecureStore.getItemAsync("access_token");
+            const host = API_BASE_URL.split("//")[1].split(":")[0];
+            const url = `http://${host}:3000/pdf/${claim.id}?token=${token}`;
+            require("expo-linking").openURL(url);
           }}
         >
           <Text style={styles.reportBtnText}>📄</Text>
@@ -198,6 +202,35 @@ export default function ClaimDetailsScreen() {
                     <Text style={styles.detailValue}>{item.to_location}</Text>
                   </View>
                 )}
+                {/* Item Attachments */}
+                {(() => {
+                  const itemAtts = (claim.attachments || []).filter((att: any) => att.expense_item_order === idx);
+                  if (itemAtts.length === 0) return null;
+                  return (
+                    <View style={{marginTop: 8}}>
+                      <Text style={styles.detailLabel}>Attachments</Text>
+                      <View style={{flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 6}}>
+                        {itemAtts.map((att: any, i: number) => (
+                          <TouchableOpacity
+                            key={i}
+                            onPress={() => {
+                              const BASE_URL = (apiClient.defaults.baseURL || "http://192.168.0.102:8000/api").replace("/api", "");
+                              require("expo-linking").openURL(`${BASE_URL}/${att.file_url}`);
+                            }}
+                            style={{
+                              flexDirection: "row", alignItems: "center", gap: 4,
+                              backgroundColor: "#ede9fe", borderRadius: 8,
+                              paddingHorizontal: 10, paddingVertical: 6,
+                            }}
+                          >
+                            <Text style={{fontSize: 12}}>👁</Text>
+                            <Text style={{fontSize: 11, color: "#7c3aed", fontWeight: "600"}}>{att.file_name || `File ${i + 1}`}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  );
+                })()}
               </View>
             </View>
           ))}
@@ -208,27 +241,7 @@ export default function ClaimDetailsScreen() {
           </View>
         </View>
 
-        {/* Attachments */}
-        {claim.attachments && claim.attachments.length > 0 && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Attachments</Text>
-            {claim.attachments.map((att: any, idx: number) => (
-              <TouchableOpacity
-                key={idx}
-                style={styles.attachmentItem}
-                onPress={() => {
-                  const url = `http://192.168.0.102:8000/${att.file_url || att.storage_path}`;
-                  console.log("Opening URL:", url);
-                  require("expo-linking").openURL(url);
-                }}
-              >
-                <Text style={styles.attachmentIcon}>📄</Text>
-                <Text style={styles.attachmentName} numberOfLines={1}>{att.file_name || att.original_name || att.name || "Attachment"}</Text>
-                <Text style={styles.attachmentArrow}>›</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
+        {/* Attachments - hidden, now item wise */}
 
         {/* Approval History */}
         {claim.approval_history && claim.approval_history.length > 0 && (
@@ -323,7 +336,7 @@ const styles = StyleSheet.create({
   expenseAmount: { color: "#2563eb", fontSize: 14, fontWeight: "800" },
   expenseDetails: { gap: 4, paddingLeft: 38 },
   detailRow: { flexDirection: "row", gap: 8 },
-  detailLabel: { color: "#94a3b8", fontSize: 11, width: 60 },
+  detailLabel: { color: "#94a3b8", fontSize: 11, minWidth: 60 },
   detailValue: { color: "#334155", fontSize: 11, flex: 1 },
   totalRow: {
     flexDirection: "row", justifyContent: "space-between",

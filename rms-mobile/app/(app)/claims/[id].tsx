@@ -206,6 +206,7 @@ export default function ClaimEditScreen() {
   const [expenseTypes, setExpenseTypes] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [showProjectDropdown, setShowProjectDropdown] = useState<number | null>(null);
+  const [showExpenseTypeSheet, setShowExpenseTypeSheet] = useState<number | null>(null);
   const [showDatePicker, setShowDatePicker] = useState<number | null>(null);
   const [attachments, setAttachments] = useState<any[]>([]);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
@@ -368,6 +369,9 @@ export default function ClaimEditScreen() {
             claim_date: item?.expense_date || new Date().toISOString().split("T")[0],
             claim_date_display: item?.expense_date
               ? item.expense_date.split("-").reverse().join("/") : "",
+            attachments: (claimData.attachments || [])
+              .filter((att: any) => att.expense_item_order === i)
+              .map((att: any) => ({ id: att.id, original_name: att.file_name, storage_path: att.file_url, isExisting: true })),
           };
         }));
         console.log("Step 8: expense items set");
@@ -395,6 +399,7 @@ export default function ClaimEditScreen() {
       purpose: "", mode: "", from_location: "", to_location: "",
       project_id: null, project_name: "",
       claim_date: new Date().toISOString().split("T")[0], claim_date_display: "",
+      attachments: [],
     }]);
   };
 
@@ -411,13 +416,112 @@ export default function ClaimEditScreen() {
 
   const totalAmount = expenseItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
-  
+  const uploadItemAttachment = async (asset: any, itemId: number) => {
+    const fileExt = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
+    const fileName = asset.fileName || `upload.${fileExt}`;
+    const mimeType = asset.mimeType || `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`;
+    try {
+      const SecureStore = await import("expo-secure-store");
+      const token = await SecureStore.getItemAsync("access_token");
+      const currentToken = token || (apiClient.defaults.headers.common?.["Authorization"] as string)?.replace("Bearer ", "");
+      const doUpload = () => new Promise<any>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", `${apiClient.defaults.baseURL}/files/upload`);
+        xhr.setRequestHeader("Authorization", `Bearer ${currentToken}`);
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(JSON.parse(xhr.responseText));
+          } else {
+            reject(new Error(`HTTP ${xhr.status}: ${xhr.responseText}`));
+          }
+        };
+        xhr.onerror = () => reject(new Error("Network error"));
+        xhr.ontimeout = () => reject(new Error("Timeout"));
+        xhr.timeout = 30000;
+        const fd = new FormData();
+        fd.append("file", { uri: asset.uri, type: mimeType, name: fileName } as any);
+        xhr.send(fd);
+      });
+      let uploadData;
+      try { uploadData = await doUpload(); }
+      catch { await new Promise(r => setTimeout(r, 2000)); uploadData = await doUpload(); }
+      if (uploadData.id) {
+        setExpenseItems(prev => prev.map(i =>
+          i.id === itemId
+            ? { ...i, attachments: [...(i.attachments || []), { id: uploadData.id, original_name: fileName, storage_path: uploadData.storage_path }] }
+            : i
+        ));
+      }
+    } catch (e: any) {
+      Alert.alert("Error", "File upload failed: " + (e?.message || "unknown"));
+    }
+  };
+
+  const uploadDocumentAttachment = async (doc: any, itemId: number) => {
+    const fileName = doc.name || "document";
+    const mimeType = doc.mimeType || "application/octet-stream";
+    try {
+      const SecureStore = await import("expo-secure-store");
+      const token = await SecureStore.getItemAsync("access_token");
+      const currentToken = token || (apiClient.defaults.headers.common?.["Authorization"] as string)?.replace("Bearer ", "");
+      const doUpload = () => new Promise<any>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", `${apiClient.defaults.baseURL}/files/upload`);
+        xhr.setRequestHeader("Authorization", `Bearer ${currentToken}`);
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(JSON.parse(xhr.responseText));
+          } else {
+            reject(new Error(`HTTP ${xhr.status}: ${xhr.responseText}`));
+          }
+        };
+        xhr.onerror = () => reject(new Error("Network error"));
+        xhr.ontimeout = () => reject(new Error("Timeout"));
+        xhr.timeout = 30000;
+        const fd = new FormData();
+        fd.append("file", { uri: doc.uri, type: mimeType, name: fileName } as any);
+        xhr.send(fd);
+      });
+      let uploadData;
+      try { uploadData = await doUpload(); }
+      catch { await new Promise(r => setTimeout(r, 2000)); uploadData = await doUpload(); }
+      if (uploadData.id) {
+        setExpenseItems(prev => prev.map(i =>
+          i.id === itemId
+            ? { ...i, attachments: [...(i.attachments || []), { id: uploadData.id, original_name: fileName, storage_path: uploadData.storage_path }] }
+            : i
+        ));
+      }
+    } catch (e: any) {
+      Alert.alert("Error", "File upload failed: " + (e?.message || "unknown"));
+    }
+  };
+
   const handleSave = async (isDraft: boolean) => {
     const validItems = expenseItems.filter(item => item.expense_type_id && item.amount);
     if (validItems.length === 0) {
       Alert.alert("Error", "Please add at least one expense item");
       return;
     }
+    if (!isDraft) {
+      for (let i = 0; i < validItems.length; i++) {
+        const item = validItems[i];
+        const row = i + 1;
+        if (!item.claim_date) { Alert.alert("Error", `Item ${row}: Date is required`); return; }
+        if (!item.purpose) { Alert.alert("Error", `Item ${row}: Purpose is required`); return; }
+        if (!item.attachments || item.attachments.length === 0) { Alert.alert("Error", `Item ${row}: Attachment is required`); return; }
+      }
+    }
+    // Validate amount against workflow
+    try {
+      const expenseTypeIds = [...new Set(validItems.map((i: any) => i.expense_type_id).filter(Boolean))];
+      const wfRes = await apiClient.get(`/workflow/match?amount=0&expense_type_ids=${expenseTypeIds.join(",")}`);
+      const wf = wfRes.data;
+      if (wf?.max_amount !== null && wf?.max_amount !== undefined && totalAmount > wf.max_amount) {
+        Alert.alert("Error", `Total amount ৳${totalAmount.toLocaleString()} exceeds the maximum allowed amount of ৳${wf.max_amount.toLocaleString()} for "${wf.name}" workflow.`);
+        return;
+      }
+    } catch {}
 
     try {
       setSaving(true);
@@ -434,8 +538,16 @@ export default function ClaimEditScreen() {
           to_location: item.to_location || null,
           project: item.project_name || null,
         })),
-        existing_attachment_paths: attachments.filter((a: any) => a.existing).map((a: any) => ({ id: a.id })),
-        attachment_ids: attachments.filter((a: any) => !a.existing).map((a: any) => a.id),
+        attachment_ids: validItems.flatMap((item: any, idx: number) =>
+          (item.attachments || [])
+            .filter((att: any) => !att.isExisting)
+            .map((att: any) => ({ id: att.id, expense_item_order: idx }))
+        ),
+        existing_attachment_paths: validItems.flatMap((item: any, idx: number) =>
+          (item.attachments || [])
+            .filter((att: any) => att.isExisting)
+            .map((att: any) => ({ file_name: att.original_name, file_path: att.storage_path, expense_item_order: idx }))
+        ),
       };
 
       await apiClient.put(`/reimbursements/${id}`, payload);
@@ -469,6 +581,71 @@ export default function ClaimEditScreen() {
     <View style={styles.container}>
       <View style={styles.topGlow} />
       <View style={styles.topGlow2} />
+
+      {/* Expense Type Bottom Sheet */}
+      {showExpenseTypeSheet !== null && (
+        <View style={{
+          position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: "rgba(0,0,0,0.5)", zIndex: 200,
+          justifyContent: "flex-end",
+        }}>
+          <View style={{
+            backgroundColor: "#fff", borderRadius: 24, padding: 20,
+            maxHeight: "70%",
+          }}>
+            <View style={{flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16}}>
+              <Text style={{fontSize: 16, fontWeight: "800", color: "#0f172a"}}>Select Expense Type</Text>
+              <TouchableOpacity onPress={() => setShowExpenseTypeSheet(null)}>
+                <Text style={{fontSize: 18, color: "#94a3b8"}}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {(() => {
+                const itemWidth = (Dimensions.get("window").width - 40 - 24) / 4;
+                const rows = [];
+                for (let i = 0; i < expenseTypes.length; i += 4) {
+                  rows.push(expenseTypes.slice(i, i + 4));
+                }
+                return rows.map((row, rowIdx) => (
+                  <View key={rowIdx} style={{flexDirection: "row", gap: 6, marginBottom: 6}}>
+                    {row.map((et: any) => {
+                      const icons: any = {
+                        "Transport": "🚗", "Food": "🍽️", "Medical": "🏥",
+                        "Mobile": "📱", "Fuel": "⛽", "Accommodation": "🏨",
+                        "Rent": "🏠", "Travel": "✈️", "Birthday Cake": "🎂", "Other": "📋"
+                      };
+                      const isSelected = expenseItems.find(i => i.id === showExpenseTypeSheet)?.expense_type_id === et.id;
+                      return (
+                        <TouchableOpacity
+                          key={et.id}
+                          style={{
+                            width: itemWidth, padding: 10, borderRadius: 14,
+                            borderWidth: 2,
+                            borderColor: isSelected ? "#7c3aed" : "#e2e8f0",
+                            backgroundColor: isSelected ? "#f5f3ff" : "#f8fafc",
+                            alignItems: "center", gap: 4,
+                          }}
+                          onPress={() => {
+                            updateExpenseItem(showExpenseTypeSheet, "expense_type_id", et.id);
+                            setShowExpenseTypeSheet(null);
+                          }}
+                        >
+                          <Text style={{fontSize: 22}}>{icons[et.name] || "📋"}</Text>
+                          <Text style={{
+                            fontSize: 10, fontWeight: "600",
+                            color: isSelected ? "#7c3aed" : "#374151",
+                            textAlign: "center"
+                          }}>{et.name}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ));
+              })()}
+            </ScrollView>
+          </View>
+        </View>
+      )}
 
       {/* Header */}
       <View style={styles.header}>
@@ -518,19 +695,24 @@ export default function ClaimEditScreen() {
 
                 {/* Expense Type */}
                 <Text style={styles.fieldLabel}>Expense Type *</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-                  {expenseTypes.map((et) => (
-                    <TouchableOpacity
-                      key={et.id}
-                      style={[styles.typeChip, item.expense_type_id === et.id && styles.typeChipActive]}
-                      onPress={() => updateExpenseItem(item.id, "expense_type_id", et.id)}
-                    >
-                      <Text style={[styles.typeChipText, item.expense_type_id === et.id && styles.typeChipTextActive]}>
-                        {et.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
+                <TouchableOpacity
+                  style={{
+                    borderWidth: 1,
+                    borderColor: item.expense_type_id ? "#7c3aed" : "#e2e8f0",
+                    borderRadius: 14, padding: 14, marginBottom: 16,
+                    backgroundColor: item.expense_type_id ? "#f5f3ff" : "#f8fafc",
+                    flexDirection: "row", justifyContent: "space-between", alignItems: "center"
+                  }}
+                  onPress={() => setShowExpenseTypeSheet(item.id)}
+                >
+                  <Text style={{
+                    fontSize: 14, fontWeight: item.expense_type_id ? "600" : "400",
+                    color: item.expense_type_id ? "#7c3aed" : "#94a3b8"
+                  }}>
+                    {item.expense_type_id ? expenseTypes.find(et => et.id === item.expense_type_id)?.name : "Select Expense Type"}
+                  </Text>
+                  <Text style={{fontSize: 16, color: "#7c3aed"}}>▼</Text>
+                </TouchableOpacity>
 
                 {/* Amount & Date */}
                 <View style={styles.row}>
@@ -607,38 +789,94 @@ export default function ClaimEditScreen() {
                     </View>
                   )}
                 </View>
+                {/* Item Attachment */}
+                <View style={{marginTop: 8, marginBottom: 8}}>
+                  <Text style={styles.fieldLabel}>Attachment *</Text>
+                  <TouchableOpacity
+                    style={{
+                      borderWidth: 1,
+                      borderColor: item.attachments?.length > 0 ? "#16a34a" : "#e2e8f0",
+                      borderRadius: 14, padding: 14, marginBottom: 8,
+                      backgroundColor: item.attachments?.length > 0 ? "#f0fdf4" : "#f8fafc",
+                      flexDirection: "row", alignItems: "center", gap: 8,
+                    }}
+                    onPress={async () => {
+                      const ImagePicker = await import("expo-image-picker");
+                      Alert.alert(
+                        "Upload Attachment",
+                        "Choose source",
+                        [
+                          {
+                            text: "Camera",
+                            onPress: async () => {
+                              const perm = await ImagePicker.requestCameraPermissionsAsync();
+                              if (!perm.granted) { Alert.alert("Permission", "Camera permission required"); return; }
+                              const result = await ImagePicker.launchCameraAsync({ quality: 0.5, base64: false });
+                              if (!result.canceled && result.assets[0]) {
+                                await uploadItemAttachment(result.assets[0], item.id);
+                              }
+                            }
+                          },
+                          {
+                            text: "Gallery",
+                            onPress: async () => {
+                              const result = await ImagePicker.launchImageLibraryAsync({
+                                mediaTypes: ImagePicker.MediaTypeOptions.All,
+                                quality: 0.5,
+                                base64: false,
+                              });
+                              if (!result.canceled && result.assets[0]) {
+                                await uploadItemAttachment(result.assets[0], item.id);
+                              }
+                            }
+                          },
+                          {
+                            text: "File",
+                            onPress: async () => {
+                              const DocumentPicker = await import("expo-document-picker");
+                              const result = await DocumentPicker.getDocumentAsync({
+                                type: ["application/pdf", "image/*", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+                                copyToCacheDirectory: true,
+                              });
+                              if (!result.canceled && result.assets[0]) {
+                                await uploadDocumentAttachment(result.assets[0], item.id);
+                              }
+                            }
+                          },
+                          { text: "Cancel", style: "cancel" }
+                        ]
+                      );
+                    }}
+                  >
+                    <Text style={{fontSize: 16}}>📎</Text>
+                    <Text style={{fontSize: 13, color: item.attachments?.length > 0 ? "#16a34a" : "#94a3b8", fontWeight: "500"}}>
+                      {item.attachments?.length > 0 ? `${item.attachments.length} file(s) attached` : "Upload Attachment"}
+                    </Text>
+                  </TouchableOpacity>
+                  {item.attachments?.length > 0 && (
+                    <View style={{gap: 4}}>
+                      {item.attachments.map((att: any, i: number) => (
+                        <View key={i} style={{flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#f0fdf4", borderRadius: 10, padding: 10}}>
+                          <Text style={{fontSize: 12, color: "#374151", flex: 1}} numberOfLines={1}>{att.original_name}</Text>
+                          <TouchableOpacity onPress={() => {
+                            const updated = item.attachments.filter((_: any, idx: number) => idx !== i);
+                            updateExpenseItem(item.id, "attachments", updated);
+                          }}>
+                            <Text style={{fontSize: 12, color: "#ef4444", marginLeft: 8}}>✕</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
               </View>
             ))}
-
             <TouchableOpacity style={styles.addItemBtn} onPress={addExpenseItem}>
               <Text style={styles.addItemBtnText}>+ Add Another Item</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Attachments */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Attachments</Text>
-            <View style={styles.attachmentBtns}>
-              <TouchableOpacity style={styles.attachBtn} onPress={pickDocument} disabled={uploadingAttachment}>
-                <Text style={styles.attachBtnIcon}>📎</Text>
-                <Text style={styles.attachBtnText}>Add Document</Text>
-              </TouchableOpacity>
-              {uploadingAttachment && <ActivityIndicator color="#2563eb" />}
-            </View>
-            {attachments.length > 0 && (
-              <View style={styles.attachmentList}>
-                {attachments.map((att: any) => (
-                  <View key={att.id} style={styles.attachmentItem}>
-                    <Text style={styles.attachmentIcon}>📄</Text>
-                    <Text style={styles.attachmentName} numberOfLines={1}>{att.name}</Text>
-                    <TouchableOpacity onPress={() => setAttachments(prev => prev.filter((a: any) => a.id !== att.id))}>
-                      <Text style={styles.attachmentRemove}>✕</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
+          {/* Attachments - hidden, now item wise */}
 
           {/* Remarks */}
           <View style={styles.section}>

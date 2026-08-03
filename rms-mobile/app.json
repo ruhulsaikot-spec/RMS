@@ -37,6 +37,7 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      "expo-speech-recognition",
       [
         "expo-notifications",
         {
@@ -52,7 +53,7 @@
           }
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker"      
     ],
     "experiments": {
       "typedRoutes": true

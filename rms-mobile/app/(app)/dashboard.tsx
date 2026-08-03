@@ -8,6 +8,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../src/context/auth-context";
 import { useRouter } from "expo-router";
 import { apiClient } from "../../src/lib/api-client";
+const BASE_URL = (apiClient.defaults.baseURL || "http://192.168.0.102:8000/api").replace("/api", "");
 
 const { width } = Dimensions.get("window");
 
@@ -51,7 +52,7 @@ export default function DashboardScreen() {
         : allClaims;
       setStats({
         total: myClaims.length,
-        pending: myClaims.filter((c: any) => ["SUBMITTED", "IN_APPROVAL", "VERIFIED"].includes(c.status)).length,
+        pending: myClaims.filter((c: any) => ["SUBMITTED", "IN_APPROVAL", "VERIFIED", "DRAFT"].includes(c.status)).length,
         paid: myClaims.filter((c: any) => c.status === "PAID").length,
         rejected: myClaims.filter((c: any) => c.status === "REJECTED").length,
       });
@@ -115,7 +116,7 @@ export default function DashboardScreen() {
                 <View style={styles.sidebarAvatar}>
                   {profilePicture ? (
                     <Image
-                      source={{ uri: `http://192.168.0.102:8000/${profilePicture}` }}
+                      source={{ uri: `${BASE_URL}/${profilePicture}` }}
                       style={{ width: 46, height: 46, borderRadius: 23 }}
                     />
                   ) : (
@@ -195,7 +196,7 @@ export default function DashboardScreen() {
           <View style={styles.avatar}>
             {profilePicture ? (
               <Image
-                source={{ uri: `http://192.168.0.102:8000/${profilePicture}` }}
+                source={{ uri: `${BASE_URL}/${profilePicture}` }}
                 style={{ width: 38, height: 38, borderRadius: 19 }}
               />
             ) : (

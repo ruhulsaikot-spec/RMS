@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useFocusEffect } from "expo-router";
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
 import {
   View, Text, StyleSheet, ScrollView,
   TouchableOpacity, TextInput, ActivityIndicator,
@@ -254,12 +255,38 @@ export default function NewClaimScreen() {
   const [attachments, setAttachments] = useState<any[]>([]);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [authToken, setAuthToken] = useState<string | null>(null);
+  const [isListening, setIsListening] = useState(false);
+  const [voiceText, setVoiceText] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [accumulatedText, setAccumulatedText] = useState("");
+  const [showVoiceReview, setShowVoiceReview] = useState(false);
+  const [voiceItems, setVoiceItems] = useState<any[]>([]);
+  const [isImageProcessing, setIsImageProcessing] = useState(false);
+  const [showExpenseTypeSheet, setShowExpenseTypeSheet] = useState<number | null>(null);
   const [remarks, setRemarks] = useState("");
   const [expenseItems, setExpenseItems] = useState<any[]>([{
     id: Date.now(), expense_type_id: null, expense_type_name: "",
     amount: "", purpose: "", claim_date: new Date().toISOString().split("T")[0],
     mode: "", project_id: null, project_name: "", from_location: "", to_location: "",
+    attachments: [],
   }]);
+
+  useSpeechRecognitionEvent("result", (event) => {
+    const text = event.results[0]?.transcript || "";
+    if (event.isFinal) {
+      setAccumulatedText(prev => {
+        const newText = prev ? prev + " " + text : text;
+        setVoiceText(newText);
+        return newText;
+      });
+    } else {
+      setVoiceText(accumulatedText ? accumulatedText + " " + text : text);
+    }
+  });
+
+  useSpeechRecognitionEvent("end", () => {
+    setIsListening(false);
+  });
 
   useEffect(() => {
     loadExpenseTypes();
@@ -288,6 +315,313 @@ export default function NewClaimScreen() {
     }, [])
   );
 
+  const startVoice = async () => {
+    const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    if (!result.granted) {
+      Alert.alert("Permission", "Microphone permission is required");
+      return;
+    }
+    setVoiceText("");
+    setAccumulatedText("");
+    setIsListening(true);
+    ExpoSpeechRecognitionModule.start({
+      lang: "en-US",
+      interimResults: true,
+      maxAlternatives: 1,
+      continuous: true,
+    });
+  };
+
+  const stopVoice = () => {
+    ExpoSpeechRecognitionModule.stop();
+    setIsListening(false);
+  };
+
+  const processVoice = async () => {
+    if (!voiceText) return;
+    try {
+      setIsProcessing(true);
+      const res = await apiClient.post("/ai/parse-claim", { text: voiceText });
+      console.log("AI response:", JSON.stringify(res.data));
+      if (res.data?.success && res.data?.data) {
+        const parsed = res.data.data;
+        const items = Array.isArray(parsed) ? parsed : (parsed.items || [parsed]);
+        
+        const todayStr = new Date().toISOString().split("T")[0];
+        const yesterdayStr = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+        const originalText = voiceText.toLowerCase();
+
+        const newItems = items.map((d: any, index: number) => {
+          const matchedType = expenseTypes.find((et: any) => 
+            et.name.toLowerCase().includes((d.expense_type || "").toLowerCase()) ||
+            (d.expense_type || "").toLowerCase().includes(et.name.toLowerCase())
+          );
+          
+          // Fix date based on voice keywords per item index
+          let fixedDate = todayStr;
+          const itemText = voiceText.toLowerCase();
+          
+          // Split by common conjunctions to find per-item context
+          const parts = itemText.split(/,|and/);
+          const itemPart = parts[index] || itemText;
+          
+          if (itemPart.includes("yesterday")) {
+            fixedDate = yesterdayStr;
+          } else if (itemPart.includes("today")) {
+            fixedDate = todayStr;
+          } else if (d.date) {
+            // Use AI date but fix year
+            const currentYear = new Date().getFullYear().toString();
+            fixedDate = d.date.replace(/^\d{4}/, currentYear);
+          }
+
+          return {
+          id: Date.now() + Math.random(),
+          expense_type_id: matchedType?.id || null,
+          expense_type_name: matchedType?.name || d.expense_type || "",
+          amount: d.amount?.toString() || "",
+          purpose: d.purpose || "",
+          claim_date: fixedDate,
+          mode: d.mode || "",
+          project_id: d.project ? projects.find((p: any) => 
+            p.name.toLowerCase().includes(d.project.toLowerCase()) ||
+            d.project.toLowerCase().includes(p.name.toLowerCase())
+          )?.id || null : null,
+          project_name: d.project ? projects.find((p: any) => 
+            p.name.toLowerCase().includes(d.project.toLowerCase()) ||
+            d.project.toLowerCase().includes(p.name.toLowerCase())
+          )?.name || "" : "",
+          from_location: d.from_location || "",
+          to_location: d.to_location || "",
+        };});
+
+        // Directly add to form
+        Alert.alert(
+          "Voice Input",
+          `Found ${newItems.length} item(s). Add to existing or replace?`,
+          [
+            {
+              text: "Add to existing",
+              onPress: () => setExpenseItems(prev => [...prev, ...newItems]),
+            },
+            {
+              text: "Replace all",
+              onPress: () => setExpenseItems(newItems),
+            },
+          ]
+        );
+        setVoiceText("");
+      } else {
+        Alert.alert("Error", "Could not parse voice input. Please try again.");
+      }
+    } catch (e: any) {
+      Alert.alert("Error", e?.message || "Failed to process voice");
+    } finally {
+      setIsProcessing(false);
+      setVoiceText("");
+    }
+  };
+
+  const pickImageForClaim = async () => {
+    Alert.alert(
+      "Select Image",
+      "Choose image source",
+      [
+        {
+          text: "Camera",
+          onPress: async () => {
+            const permission = await ImagePicker.requestCameraPermissionsAsync();
+            if (!permission.granted) {
+              Alert.alert("Permission", "Camera permission is required");
+              return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              quality: 0.3,
+              base64: true,
+              exif: false,
+            });
+            if (!result.canceled && result.assets[0]) {
+              processImage(result.assets[0]);
+            }
+          },
+        },
+        {
+          text: "Gallery",
+          onPress: async () => {
+            const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (!permission.granted) {
+              Alert.alert("Permission", "Gallery permission is required");
+              return;
+            }
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              quality: 0.3,
+              base64: true,
+              exif: false,
+            });
+            if (!result.canceled && result.assets[0]) {
+              processImage(result.assets[0]);
+            }
+          },
+        },
+        { text: "Cancel", style: "cancel" },
+      ]
+    );
+  };
+
+  const processImage = async (asset: any) => {
+    if (!asset.base64) {
+      Alert.alert("Error", "Could not read image");
+      return;
+    }
+    try {
+      setIsImageProcessing(true);
+      console.log("Calling parse-image API, base64 length:", asset.base64?.length);
+      const SecureStore = await import("expo-secure-store");
+      const token = await SecureStore.getItemAsync("access_token");
+      const fetchRes = await fetch(`${apiClient.defaults.baseURL}/ai/parse-image`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          image_base64: asset.base64,
+          media_type: asset.mimeType || "image/jpeg",
+        }),
+      });
+      console.log("Parse image status:", fetchRes.status);
+      const resData = await fetchRes.json();
+      console.log("Parse image response:", JSON.stringify(resData).substring(0, 200));
+      if (resData?.success && resData?.data) {
+        const res = { data: resData };
+        const items = Array.isArray(res.data.data) ? res.data.data : [res.data.data];
+        const todayStr = new Date().toISOString().split("T")[0];
+        const currentYear = new Date().getFullYear().toString();
+        const newItems = items.map((d: any) => {
+          const matchedType = expenseTypes.find((et: any) =>
+            et.name.toLowerCase().includes((d.expense_type || "").toLowerCase()) ||
+            (d.expense_type || "").toLowerCase().includes(et.name.toLowerCase())
+          );
+          let fixedDate = d.date || todayStr;
+          if (fixedDate) fixedDate = fixedDate.replace(/^\d{4}/, currentYear);
+          return {
+            id: Date.now() + Math.random(),
+            expense_type_id: matchedType?.id || null,
+            expense_type_name: matchedType?.name || d.expense_type || "",
+            amount: d.amount?.toString() || "",
+            purpose: d.purpose || "",
+            claim_date: fixedDate,
+            mode: d.mode || "",
+            project_id: d.project ? projects.find((p: any) =>
+              p.name.toLowerCase().includes(d.project.toLowerCase())
+            )?.id || null : null,
+            project_name: d.project ? projects.find((p: any) =>
+              p.name.toLowerCase().includes(d.project.toLowerCase())
+            )?.name || "" : "",
+            from_location: d.from_location || "",
+            to_location: d.to_location || "",
+          };
+        });
+        // Show extracted data as text for editing
+        const extractedText = newItems.map((item: any, idx: number) => 
+          `Item ${idx + 1}: ${item.expense_type_name}, Amount: ${item.amount}, Purpose: ${item.purpose}, Date: ${item.claim_date}${item.from_location ? `, From: ${item.from_location}` : ''}${item.to_location ? `, To: ${item.to_location}` : ''}${item.mode ? `, Mode: ${item.mode}` : ''}`
+        ).join('\n');
+        setVoiceText(extractedText);
+      } else {
+        Alert.alert("Error", "Could not extract data from image.");
+      }
+    } catch (e: any) {
+      console.log("Image error:", e?.message, e?.response?.status, e?.response?.data);
+      Alert.alert("Error", e?.message || "Failed to process image");
+    } finally {
+      setIsImageProcessing(false);
+    }
+  };
+
+
+  const uploadItemAttachment = async (asset: any, itemId: number) => {
+    const fileExt = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
+    const fileName = asset.fileName || `upload.${fileExt}`;
+    const mimeType = asset.mimeType || `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`;
+    try {
+      const SecureStore = await import("expo-secure-store");
+      const token = await SecureStore.getItemAsync("access_token");
+      const currentToken = token || (apiClient.defaults.headers.common?.["Authorization"] as string)?.replace("Bearer ", "");
+      const doUpload = () => new Promise<any>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", `${apiClient.defaults.baseURL}/files/upload`);
+        xhr.setRequestHeader("Authorization", `Bearer ${currentToken}`);
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(JSON.parse(xhr.responseText));
+          } else {
+            reject(new Error(`HTTP ${xhr.status}: ${xhr.responseText}`));
+          }
+        };
+        xhr.onerror = () => reject(new Error("Network error"));
+        xhr.ontimeout = () => reject(new Error("Timeout"));
+        xhr.timeout = 30000;
+        const fd = new FormData();
+        fd.append("file", { uri: asset.uri, type: mimeType, name: fileName } as any);
+        xhr.send(fd);
+      });
+      let uploadData;
+      try { uploadData = await doUpload(); }
+      catch { await new Promise(r => setTimeout(r, 2000)); uploadData = await doUpload(); }
+      if (uploadData.id) {
+        setExpenseItems(prev => prev.map(i =>
+          i.id === itemId
+            ? { ...i, attachments: [...(i.attachments || []), { id: uploadData.id, original_name: fileName, storage_path: uploadData.storage_path }] }
+            : i
+        ));
+      }
+    } catch (e: any) {
+      Alert.alert("Error", "File upload failed: " + (e?.message || "unknown"));
+    }
+  };
+
+  const uploadDocumentAttachment = async (doc: any, itemId: number) => {
+    const fileName = doc.name || "document";
+    const mimeType = doc.mimeType || "application/octet-stream";
+    try {
+      const SecureStore = await import("expo-secure-store");
+      const token = await SecureStore.getItemAsync("access_token");
+      const currentToken = token || (apiClient.defaults.headers.common?.["Authorization"] as string)?.replace("Bearer ", "");
+      const doUpload = () => new Promise<any>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", `${apiClient.defaults.baseURL}/files/upload`);
+        xhr.setRequestHeader("Authorization", `Bearer ${currentToken}`);
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(JSON.parse(xhr.responseText));
+          } else {
+            reject(new Error(`HTTP ${xhr.status}: ${xhr.responseText}`));
+          }
+        };
+        xhr.onerror = () => reject(new Error("Network error"));
+        xhr.ontimeout = () => reject(new Error("Timeout"));
+        xhr.timeout = 30000;
+        const fd = new FormData();
+        fd.append("file", { uri: doc.uri, type: mimeType, name: fileName } as any);
+        xhr.send(fd);
+      });
+      let uploadData;
+      try { uploadData = await doUpload(); }
+      catch { await new Promise(r => setTimeout(r, 2000)); uploadData = await doUpload(); }
+      if (uploadData.id) {
+        setExpenseItems(prev => prev.map(i =>
+          i.id === itemId
+            ? { ...i, attachments: [...(i.attachments || []), { id: uploadData.id, original_name: fileName, storage_path: uploadData.storage_path }] }
+            : i
+        ));
+      }
+    } catch (e: any) {
+      Alert.alert("Error", "File upload failed: " + (e?.message || "unknown"));
+    }
+  };
+
   const loadToken = async () => {
     const SecureStore = await import("expo-secure-store");
     const token = await SecureStore.getItemAsync("access_token");
@@ -299,6 +633,7 @@ export default function NewClaimScreen() {
       id: Date.now(), expense_type_id: null, expense_type_name: "",
       amount: "", purpose: "", claim_date: new Date().toISOString().split("T")[0],
       mode: "", project_id: null, project_name: "", from_location: "", to_location: "",
+      attachments: [],
     }]);
   };
 
@@ -438,6 +773,25 @@ export default function NewClaimScreen() {
       Alert.alert("Error", "Please add at least one expense item with type and amount");
       return;
     }
+    if (!isDraft) {
+      for (let i = 0; i < validItems.length; i++) {
+        const item = validItems[i];
+        const row = i + 1;
+        if (!item.claim_date) { Alert.alert("Error", `Item ${row}: Date is required`); return; }
+        if (!item.purpose) { Alert.alert("Error", `Item ${row}: Purpose is required`); return; }
+        if (!item.attachments || item.attachments.length === 0) { Alert.alert("Error", `Item ${row}: Attachment is required`); return; }
+      }
+    }
+    // Validate amount against workflow
+    try {
+      const expenseTypeIds = [...new Set(validItems.map((i: any) => i.expense_type_id).filter(Boolean))];
+      const wfRes = await apiClient.get(`/workflow/match?amount=0&expense_type_ids=${expenseTypeIds.join(",")}`);
+      const wf = wfRes.data;
+      if (wf?.max_amount !== null && wf?.max_amount !== undefined && totalAmount > wf.max_amount) {
+        Alert.alert("Error", `Total amount ৳${totalAmount.toLocaleString()} exceeds the maximum allowed amount of ৳${wf.max_amount.toLocaleString()} for "${wf.name}" workflow.`);
+        return;
+      }
+    } catch {}
     try {
       setSaving(true);
       const payload: any = {
@@ -454,7 +808,9 @@ export default function NewClaimScreen() {
           to_location: item.to_location || null,
           project: item.project_name || null,
         })),
-        attachment_ids: attachments.map((a: any) => a.id),
+        attachment_ids: validItems.flatMap((item: any, idx: number) =>
+          (item.attachments || []).map((att: any) => ({ id: att.id, expense_item_order: idx }))
+        ),
       };
       const res = await apiClient.post("/reimbursements", payload);
       if (!isDraft) {
@@ -503,13 +859,234 @@ export default function NewClaimScreen() {
             <Text style={styles.backIcon}>‹</Text>
           </View>
         </TouchableOpacity>
-        <View>
+        <View style={{flex: 1}}>
           <Text style={styles.title}>New Claim</Text>
           <Text style={styles.subtitle}>Fill in the details below</Text>
         </View>
+        <View style={{flexDirection: "row", gap: 8}}>
+          <TouchableOpacity
+            style={{
+              width: 44, height: 44, borderRadius: 22,
+              backgroundColor: "#0891b2",
+              justifyContent: "center", alignItems: "center",
+            }}
+            onPress={pickImageForClaim}
+          >
+            <Text style={{fontSize: 20}}>📷</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{
+              width: 44, height: 44, borderRadius: 22,
+              backgroundColor: isListening ? "#ef4444" : "#7c3aed",
+              justifyContent: "center", alignItems: "center",
+            }}
+            onPress={isListening ? stopVoice : startVoice}
+          >
+            <Text style={{fontSize: 20}}>{isListening ? "⏹" : "🎙️"}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {expenseItems.map(item => (
+      {/* Voice Review Modal */}
+      {showVoiceReview && (
+        <View style={{
+          position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: "rgba(0,0,0,0.5)", zIndex: 100,
+          justifyContent: "flex-end",
+        }}>
+          <View style={{
+            backgroundColor: "#fff", borderRadius: 24, padding: 20,
+            maxHeight: "85%",
+          }}>
+            <View style={{flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16}}>
+              <Text style={{fontSize: 16, fontWeight: "800", color: "#0f172a"}}>Review Voice Input</Text>
+              <TouchableOpacity onPress={() => setShowVoiceReview(false)}>
+                <Text style={{fontSize: 18, color: "#94a3b8"}}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {voiceItems.map((item, idx) => (
+                <View key={idx} style={{
+                  backgroundColor: "#f8fafc", borderRadius: 16, padding: 16,
+                  marginBottom: 12, borderWidth: 1, borderColor: "#e2e8f0"
+                }}>
+                  <Text style={{fontSize: 12, fontWeight: "700", color: "#7c3aed", marginBottom: 12}}>
+                    Item {idx + 1}
+                  </Text>
+                  <Text style={{fontSize: 11, color: "#64748b", marginBottom: 4}}>Expense Type</Text>
+                  <TextInput
+                    style={{borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 10, padding: 10, fontSize: 13, marginBottom: 10, backgroundColor: "#fff"}}
+                    value={item.expense_type_name}
+                    onChangeText={(text) => {
+                      const updated = [...voiceItems];
+                      updated[idx] = {...updated[idx], expense_type_name: text};
+                      setVoiceItems(updated);
+                    }}
+                  />
+                  <Text style={{fontSize: 11, color: "#64748b", marginBottom: 4}}>Amount</Text>
+                  <TextInput
+                    style={{borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 10, padding: 10, fontSize: 13, marginBottom: 10, backgroundColor: "#fff"}}
+                    value={item.amount}
+                    keyboardType="decimal-pad"
+                    onChangeText={(text) => {
+                      const updated = [...voiceItems];
+                      updated[idx] = {...updated[idx], amount: text};
+                      setVoiceItems(updated);
+                    }}
+                  />
+                  <Text style={{fontSize: 11, color: "#64748b", marginBottom: 4}}>Purpose</Text>
+                  <TextInput
+                    style={{borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 10, padding: 10, fontSize: 13, marginBottom: 10, backgroundColor: "#fff"}}
+                    value={item.purpose}
+                    onChangeText={(text) => {
+                      const updated = [...voiceItems];
+                      updated[idx] = {...updated[idx], purpose: text};
+                      setVoiceItems(updated);
+                    }}
+                  />
+                  <Text style={{fontSize: 11, color: "#64748b", marginBottom: 4}}>Date (YYYY-MM-DD)</Text>
+                  <TextInput
+                    style={{borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 10, padding: 10, fontSize: 13, marginBottom: 10, backgroundColor: "#fff"}}
+                    value={item.claim_date}
+                    onChangeText={(text) => {
+                      const updated = [...voiceItems];
+                      updated[idx] = {...updated[idx], claim_date: text};
+                      setVoiceItems(updated);
+                    }}
+                  />
+                  <Text style={{fontSize: 11, color: "#64748b", marginBottom: 4}}>Mode</Text>
+                  <TextInput
+                    style={{borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 10, padding: 10, fontSize: 13, marginBottom: 10, backgroundColor: "#fff"}}
+                    value={item.mode}
+                    onChangeText={(text) => {
+                      const updated = [...voiceItems];
+                      updated[idx] = {...updated[idx], mode: text};
+                      setVoiceItems(updated);
+                    }}
+                  />
+                  <Text style={{fontSize: 11, color: "#64748b", marginBottom: 4}}>From</Text>
+                  <TextInput
+                    style={{borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 10, padding: 10, fontSize: 13, marginBottom: 10, backgroundColor: "#fff"}}
+                    value={item.from_location}
+                    onChangeText={(text) => {
+                      const updated = [...voiceItems];
+                      updated[idx] = {...updated[idx], from_location: text};
+                      setVoiceItems(updated);
+                    }}
+                  />
+                  <Text style={{fontSize: 11, color: "#64748b", marginBottom: 4}}>To</Text>
+                  <TextInput
+                    style={{borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 10, padding: 10, fontSize: 13, marginBottom: 10, backgroundColor: "#fff"}}
+                    value={item.to_location}
+                    onChangeText={(text) => {
+                      const updated = [...voiceItems];
+                      updated[idx] = {...updated[idx], to_location: text};
+                      setVoiceItems(updated);
+                    }}
+                  />
+                  <Text style={{fontSize: 11, color: "#64748b", marginBottom: 4}}>Project</Text>
+                  <TextInput
+                    style={{borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 10, padding: 10, fontSize: 13, marginBottom: 4, backgroundColor: "#fff"}}
+                    value={item.project_name}
+                    onChangeText={(text) => {
+                      const updated = [...voiceItems];
+                      updated[idx] = {...updated[idx], project_name: text};
+                      setVoiceItems(updated);
+                    }}
+                  />
+                </View>
+              ))}
+            </ScrollView>
+            <View style={{flexDirection: "row", gap: 12, marginTop: 16}}>
+              <TouchableOpacity
+                style={{flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: "#e2e8f0", alignItems: "center"}}
+                onPress={() => {
+                  setExpenseItems(prev => [...prev, ...voiceItems]);
+                  setShowVoiceReview(false);
+                }}
+              >
+                <Text style={{fontSize: 13, fontWeight: "600", color: "#374151"}}>Add to Existing</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{flex: 1, padding: 14, borderRadius: 14, backgroundColor: "#7c3aed", alignItems: "center"}}
+                onPress={() => {
+                  setExpenseItems(voiceItems);
+                  setShowVoiceReview(false);
+                }}
+              >
+                <Text style={{fontSize: 13, fontWeight: "700", color: "#fff"}}>Replace All</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
+  {/* Expense Type Bottom Sheet */}
+      {showExpenseTypeSheet !== null && (
+        <View style={{
+          position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: "rgba(0,0,0,0.5)", zIndex: 200,
+          justifyContent: "flex-end",
+        }}>
+          <View style={{
+            backgroundColor: "#fff", borderRadius: 24, padding: 20,
+            maxHeight: "70%",
+          }}>
+            <View style={{flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16}}>
+              <Text style={{fontSize: 16, fontWeight: "800", color: "#0f172a"}}>Select Expense Type</Text>
+              <TouchableOpacity onPress={() => setShowExpenseTypeSheet(null)}>
+                <Text style={{fontSize: 18, color: "#94a3b8"}}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {(() => {
+                const itemWidth = (Dimensions.get("window").width - 40 - 24) / 4;
+                const rows = [];
+                for (let i = 0; i < expenseTypes.length; i += 4) {
+                  rows.push(expenseTypes.slice(i, i + 4));
+                }
+                return rows.map((row, rowIdx) => (
+                  <View key={rowIdx} style={{flexDirection: "row", gap: 6, marginBottom: 6}}>
+                    {row.map((et: any) => {
+                      const icons: any = {
+                        "Transport": "🚗", "Food": "🍽️", "Medical": "🏥",
+                        "Mobile": "📱", "Fuel": "⛽", "Accommodation": "🏨",
+                        "Rent": "🏠", "Travel": "✈️", "Birthday Cake": "🎂", "Other": "📋"
+                      };
+                      const isSelected = expenseItems.find(i => i.id === showExpenseTypeSheet)?.expense_type_id === et.id;
+                      return (
+                        <TouchableOpacity
+                          key={et.id}
+                          style={{
+                            width: itemWidth, padding: 10, borderRadius: 14,
+                            borderWidth: 2,
+                            borderColor: isSelected ? "#7c3aed" : "#e2e8f0",
+                            backgroundColor: isSelected ? "#f5f3ff" : "#f8fafc",
+                            alignItems: "center", gap: 4,
+                          }}
+                          onPress={() => {
+                            updateExpenseItem(showExpenseTypeSheet, "expense_type_id", et.id);
+                            setShowExpenseTypeSheet(null);
+                          }}
+                        >
+                          <Text style={{fontSize: 22}}>{icons[et.name] || "📋"}</Text>
+                          <Text style={{
+                            fontSize: 10, fontWeight: "600",
+                            color: isSelected ? "#7c3aed" : "#374151",
+                            textAlign: "center"
+                          }}>{et.name}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ));
+              })()}
+                </ScrollView>
+          </View>
+        </View>
+      )}
+
+  {expenseItems.map(item => (
         <DatePickerModal
           key={item.id}
           visible={showDatePicker === item.id}
@@ -520,6 +1097,57 @@ export default function NewClaimScreen() {
       ))}
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        {/* Voice Input Section */}
+        {(voiceText || isListening || isProcessing) && (
+          <View style={{
+            backgroundColor: "#f5f3ff", borderRadius: 16, padding: 16,
+            marginBottom: 16, borderWidth: 1, borderColor: "#ddd6fe"
+          }}>
+            <Text style={{color: "#7c3aed", fontSize: 12, fontWeight: "700", marginBottom: 8}}>
+              {isListening ? "🎙️ Listening..." : isProcessing ? "⚙️ Processing..." : "Edit voice text then process:"}
+            </Text>
+            {!isListening && (
+              <>
+                <TextInput
+                  style={{
+                    borderWidth: 1, borderColor: "#ddd6fe", borderRadius: 12,
+                    padding: 12, fontSize: 13, color: "#374151",
+                    backgroundColor: "#fff", marginBottom: 12,
+                    minHeight: 80, textAlignVertical: "top"
+                  }}
+                  value={voiceText}
+                  onChangeText={setVoiceText}
+                  multiline
+                  placeholder="Voice text will appear here. You can edit it..."
+                  placeholderTextColor="#94a3b8"
+                />
+                <View style={{flexDirection: "row", gap: 8}}>
+                  <TouchableOpacity
+                    onPress={() => setVoiceText("")}
+                    style={{
+                      flex: 1, borderWidth: 1, borderColor: "#ddd6fe",
+                      borderRadius: 12, padding: 12, alignItems: "center"
+                    }}
+                  >
+                    <Text style={{color: "#94a3b8", fontSize: 13, fontWeight: "600"}}>Clear</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={processVoice}
+                    disabled={isProcessing || !voiceText}
+                    style={{
+                      flex: 2, backgroundColor: "#7c3aed", borderRadius: 12,
+                      padding: 12, alignItems: "center", opacity: !voiceText ? 0.5 : 1
+                    }}
+                  >
+                    <Text style={{color: "#fff", fontSize: 13, fontWeight: "700"}}>
+                      {isProcessing ? "Processing..." : "Process & Fill Form"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        )}
 
         {/* Expense Items */}
         <View style={styles.section}>
@@ -543,19 +1171,24 @@ export default function NewClaimScreen() {
 
               {/* Expense Type */}
               <Text style={styles.fieldLabel}>Expense Type *</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-                {expenseTypes.map((et) => (
-                  <TouchableOpacity
-                    key={et.id}
-                    style={[styles.typeChip, item.expense_type_id === et.id && styles.typeChipActive]}
-                    onPress={() => updateExpenseItem(item.id, "expense_type_id", et.id)}
-                  >
-                    <Text style={[styles.typeChipText, item.expense_type_id === et.id && styles.typeChipTextActive]}>
-                      {et.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
+              <TouchableOpacity
+                style={{
+                  borderWidth: 1,
+                  borderColor: item.expense_type_id ? "#7c3aed" : "#e2e8f0",
+                  borderRadius: 14, padding: 14, marginBottom: 16,
+                  backgroundColor: item.expense_type_id ? "#f5f3ff" : "#f8fafc",
+                  flexDirection: "row", justifyContent: "space-between", alignItems: "center"
+                }}
+                onPress={() => setShowExpenseTypeSheet(item.id)}
+              >
+                <Text style={{
+                  fontSize: 14, fontWeight: item.expense_type_id ? "600" : "400",
+                  color: item.expense_type_id ? "#7c3aed" : "#94a3b8"
+                }}>
+                  {item.expense_type_id ? expenseTypes.find(et => et.id === item.expense_type_id)?.name : "Select Expense Type"}
+                </Text>
+                <Text style={{fontSize: 16, color: "#7c3aed"}}>▼</Text>
+              </TouchableOpacity>
 
               {/* Amount & Date */}
               <View style={styles.row}>
@@ -665,38 +1298,93 @@ export default function NewClaimScreen() {
                   </View>
                 )}
               </View>
+              {/* Item Attachment */}
+              <View style={{marginTop: 8, marginBottom: 8}}>
+                <Text style={styles.fieldLabel}>Attachment *</Text>
+                <TouchableOpacity
+                  style={{
+                    borderWidth: 1,
+                    borderColor: item.attachments?.length > 0 ? "#16a34a" : "#e2e8f0",
+                    borderRadius: 14, padding: 14, marginBottom: 8,
+                    backgroundColor: item.attachments?.length > 0 ? "#f0fdf4" : "#f8fafc",
+                    flexDirection: "row", alignItems: "center", gap: 8,
+                  }}
+                  onPress={async () => {
+                      Alert.alert(
+                        "Upload Attachment",
+                        "Choose source",
+                        [
+                          {
+                            text: "Camera",
+                            onPress: async () => {
+                              const perm = await ImagePicker.requestCameraPermissionsAsync();
+                              if (!perm.granted) { Alert.alert("Permission", "Camera permission required"); return; }
+                              const result = await ImagePicker.launchCameraAsync({ quality: 0.5, base64: false });
+                              if (!result.canceled && result.assets[0]) {
+                                await uploadItemAttachment(result.assets[0], item.id);
+                              }
+                            }
+                          },
+                          {
+                            text: "Gallery",
+                            onPress: async () => {
+                              const result = await ImagePicker.launchImageLibraryAsync({
+                                mediaTypes: ImagePicker.MediaTypeOptions.All,
+                                quality: 0.5,
+                                base64: false,
+                              });
+                              if (!result.canceled && result.assets[0]) {
+                                await uploadItemAttachment(result.assets[0], item.id);
+                              }
+                            }
+                          },
+                          {
+                            text: "File",
+                            onPress: async () => {
+                              const DocumentPicker = await import("expo-document-picker");
+                              const result = await DocumentPicker.getDocumentAsync({
+                                type: ["application/pdf", "image/*", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+                                copyToCacheDirectory: true,
+                              });
+                              if (!result.canceled && result.assets[0]) {
+                                await uploadDocumentAttachment(result.assets[0], item.id);
+                              }
+                            }
+                          },
+                          { text: "Cancel", style: "cancel" }
+                        ]
+                      );
+                    }}
+                  >
+                  <Text style={{fontSize: 16}}>📎</Text>
+                  <Text style={{fontSize: 13, color: item.attachments?.length > 0 ? "#16a34a" : "#94a3b8", fontWeight: "500"}}>
+                    {item.attachments?.length > 0 ? `${item.attachments.length} file(s) attached` : "Upload Attachment"}
+                  </Text>
+                </TouchableOpacity>
+                {item.attachments?.length > 0 && (
+                  <View style={{gap: 4}}>
+                    {item.attachments.map((att: any, i: number) => (
+                      <View key={i} style={{flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#f0fdf4", borderRadius: 10, padding: 10}}>
+                        <Text style={{fontSize: 12, color: "#374151", flex: 1}} numberOfLines={1}>{att.original_name}</Text>
+                        <TouchableOpacity onPress={() => {
+                          const updated = item.attachments.filter((_: any, idx: number) => idx !== i);
+                          updateExpenseItem(item.id, "attachments", updated);
+                        }}>
+                          <Text style={{fontSize: 12, color: "#ef4444", marginLeft: 8}}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
             </View>
           ))}
-
           <TouchableOpacity style={styles.addItemBtn} onPress={addExpenseItem}>
             <Text style={styles.addItemBtnText}>+ Add Another Item</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Attachments */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Attachments</Text>
-          <View style={styles.attachmentBtns}>
-            <TouchableOpacity style={styles.attachBtn} onPress={pickDocument} disabled={uploadingAttachment}>
-              <Text style={styles.attachBtnIcon}>📎</Text>
-              <Text style={styles.attachBtnText}>Add Document</Text>
-            </TouchableOpacity>
-            {uploadingAttachment && <ActivityIndicator color="#2563eb" />}
-          </View>
-          {attachments.length > 0 && (
-            <View style={styles.attachmentList}>
-              {attachments.map((att: any) => (
-                <View key={att.id} style={styles.attachmentItem}>
-                  <Text style={styles.attachmentIcon}>📄</Text>
-                  <Text style={styles.attachmentName} numberOfLines={1}>{att.name}</Text>
-                  <TouchableOpacity onPress={() => removeAttachment(att.id)}>
-                    <Text style={styles.attachmentRemove}>✕</Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
+        {/* Attachments - hidden, now item wise */}
 
         {/* Remarks */}
         <View style={styles.section}>
